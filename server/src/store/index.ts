@@ -30,20 +30,41 @@ class FileDb {
   private timer: NodeJS.Timeout | null = null;
   constructor(private file: string) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    if (fs.existsSync(file)) this.data = { ...this.data, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+    this.data = { ...this.data, ...this.read() };
+  }
+  /** Load the database; an empty or damaged file (e.g. the process was killed mid-write) never stops start-up. */
+  private read(): Partial<Collections> {
+    for (const f of [this.file, this.file + '.tmp']) {
+      if (!fs.existsSync(f)) continue;
+      const text = fs.readFileSync(f, 'utf8');
+      if (!text.trim()) continue;
+      try {
+        return JSON.parse(text);
+      } catch {
+        const backup = `${f}.corrupt-${Date.now()}`;
+        fs.copyFileSync(f, backup);
+        console.warn(`[store] ${f} could not be parsed; kept a copy at ${backup} and continued.`);
+      }
+    }
+    return {};
+  }
+  private write() {
+    const tmp = this.file + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(this.data));
+    fs.renameSync(tmp, this.file);
   }
   save() {
     if (this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      const tmp = this.file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.data));
-      fs.renameSync(tmp, this.file);
+      this.write();
     }, 50);
   }
   flush() {
-    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
-    fs.writeFileSync(this.file, JSON.stringify(this.data));
+    if (!this.timer) return; // nothing pending
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.write();
   }
 }
 
@@ -84,6 +105,7 @@ class FileRepo<T extends { id: string; updatedAt?: string }> implements Repo<T> 
 function createFileStore(): Store {
   const db = new FileDb(path.join(config.dataDir, 'db.json'));
   process.on('exit', () => db.flush());
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => { db.flush(); process.exit(0); });
   return {
     kind: 'file',
     projects: new FileRepo<Project>(db, 'projects'),
