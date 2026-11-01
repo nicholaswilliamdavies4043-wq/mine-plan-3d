@@ -131,9 +131,9 @@ export function hubsGeometry(hubs: Hub[], profile: TunnelProfile): THREE.BufferG
     // floor polygon (B0, A0, B1, A1, ...) where A = +perp side (towards next branch)
     const ring: THREE.Vector3[] = [];
     for (let i = 0; i < br.length; i++) ring.push(corner(i, -1), corner(i, 1));
-    const shape2d = ring.map((v) => new THREE.Vector2(v.x, v.z));
-    let tris = THREE.ShapeUtils.triangulateShape(shape2d, []);
-    if (!tris.length && ring.length >= 3) tris = ring.slice(1, -1).map((_, i) => [0, i + 1, i + 2]);
+    // Floor/back: the ring can self-intersect at acute junctions, so cover its convex hull instead.
+    const hull = convexHullXZ(ring);
+    const tris = hull.slice(1, -1).map((_, i) => [hull[0], hull[i + 1], hull[i + 2]]);
     b.setMaterial(1);
     for (const [i, j, k] of tris) {
       const a = ring[i], c = ring[j], d = ring[k];
@@ -171,6 +171,28 @@ export function hubsGeometry(hubs: Hub[], profile: TunnelProfile): THREE.BufferG
     }
   }
   return b.build();
+}
+
+/** Indices of the convex hull of points in the xz plane (monotone chain). */
+function convexHullXZ(pts: THREE.Vector3[]): number[] {
+  const idx = pts.map((_, i) => i).sort((a, b) => pts[a].x - pts[b].x || pts[a].z - pts[b].z);
+  if (idx.length < 3) return idx;
+  const cross = (o: number, a: number, b: number) =>
+    (pts[a].x - pts[o].x) * (pts[b].z - pts[o].z) - (pts[a].z - pts[o].z) * (pts[b].x - pts[o].x);
+  const lower: number[] = [];
+  for (const i of idx) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], i) <= 0) lower.pop();
+    lower.push(i);
+  }
+  const upper: number[] = [];
+  for (let k = idx.length - 1; k >= 0; k--) {
+    const i = idx[k];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], i) <= 0) upper.pop();
+    upper.push(i);
+  }
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
 }
 
 /** Procedural rock texture (no external image files needed). */

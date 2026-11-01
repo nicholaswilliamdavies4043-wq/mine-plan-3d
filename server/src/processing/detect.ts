@@ -140,7 +140,7 @@ export function detectNetwork(input: DetectInput): DetectionResult {
   cleanupGraph(graph, {
     driveWidth,
     spurLength: params.spurFactor * driveWidth,
-    mergeDistance: driveWidth * 0.9,
+    mergeDistance: driveWidth * 1.6,
     minComponentLength: driveWidth * 3,
     minMeanHalfWidth: half * 0.35,
     simplifyTolerance: Math.max(0.75, params.simplifyFactor * driveWidth),

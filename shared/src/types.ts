@@ -102,7 +102,7 @@ export const defaultDetectionParams = (): DetectionParams => ({
   holeFillFactor: 6,
   minBlobFactor: 12,
   spurFactor: 1.4,
-  simplifyFactor: 0.3,
+  simplifyFactor: 0.5,
   bridgeGapFactor: 4.5,
   detectStopes: true,
   stopeMinSaturation: 0.09,

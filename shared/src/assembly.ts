@@ -103,7 +103,7 @@ export interface AssemblyOptions {
   splitTurnDeg: number;
 }
 
-export const defaultAssemblyOptions = (): AssemblyOptions => ({ continuousTurnDeg: 12, splitTurnDeg: 22 });
+export const defaultAssemblyOptions = (): AssemblyOptions => ({ continuousTurnDeg: 12, splitTurnDeg: 30 });
 
 // ---------------------------------------------------------------------------
 
@@ -369,7 +369,10 @@ export function assemble(levels: LevelInput[], profile: TunnelProfile, kit: Reso
       const gap = h2 - h1;
       if (gap < Math.PI - 1e-6 && gap > 1e-3) R = Math.max(R, (wMax / 2) / Math.tan(gap / 2) + 0.15 * wMax);
     }
-    R = Math.min(R, wMax * 4);
+    // Keep connectors compact: acute junctions would otherwise grow very large, and short
+    // drives between two junctions must keep some straight length.
+    const shortest = Math.min(...inc.map((i) => polylineLength(i.e.pts as Vec2[])));
+    R = Math.min(R, wMax * 1.5, Math.max(wMax * 0.5, shortest * 0.45));
     hubs.push({
       id: nodeId,
       center: [c[0], y, c[1]],

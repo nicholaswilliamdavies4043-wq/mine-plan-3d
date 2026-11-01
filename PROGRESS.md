@@ -1,31 +1,23 @@
-# Build progress (paused 1 Nov 2026)
+# Build progress
 
-This file is a checkpoint so the build can resume. Say "continue" in a new session and point to this file.
+## Status (1 Nov 2026): working MVP
 
-## Done (written and, where noted, tested)
+- All three workspaces pass the type check, and all 9 unit tests pass.
+- The client builds with `vite build`.
+- The API was tested end to end:
+  - Projects, plan upload and detection on the 445 S6S7 sheet.
+  - Kits.
+  - Asset import, including the licence check and file serving.
+- The built client is served by the API, including SPA routes.
+- On the sample plan, assembly produced 176 drive segments (about 2.7 km at 0.55 m/px), 431 straight modules, 188 fitted connectors and 93 dead ends. The geometry was checked for NaN values and the footprint looks right.
 
-- **Monorepo**: npm workspaces `shared`, `server`, `client` (root `package.json`, `vitest.config.ts`, `.env.example`, `.gitignore`).
-- **shared/**: types, georeferencing (2-point similarity, rotated sheets), network editing (snap, split, merge), kit assembly (straight tiling, connector matching for T/X/bend assets, parametric hubs, dead ends, infrastructure spacing, collision), asset normalisation matrices. Tests pass (`shared/test`).
-- **server/** (Express + TS):
-  - Detection pipeline in `src/processing/` (wall mask → distance transform → wide-area removal → skeleton → graph cleanup → gap bridging → stope detection). Tuned on the 445 S6S7 sheet. Tests pass (`server/test/detect.test.ts`).
-  - Routes: projects, plans (upload, patch, image, detect with replace/merge), assets (validate, import, files, thumbnail), kits.
-  - Storage: local disk or S3. Store: JSON file (default) or Prisma/PostgreSQL (`prisma/schema.prisma`; not yet generated or migrated, because Prisma engine downloads are blocked in the build sandbox).
-  - API smoke-tested end to end with the sample plan.
-- **client/** (React + Vite + R3F), written but **not yet built or type-checked**:
-  - `main.tsx`, `api.ts`, `styles.css` (Sandvik palette, Arial).
-  - Pages: `ProjectsPage`, `ProjectPage`, `PlanEditorPage` (calibrate → select portion → detect → edit, undo/redo, autosave), `ViewerPage` (overview + walk-through, headlamp, collision, GLB export).
-  - `components/PlanCanvas.tsx` (2D editor), `components/AssetImportWizard.tsx`, `components/assetAnalysis.ts` (opening detection by raycasting).
-  - `three/builtinKit.ts`, `three/MineModel.tsx`, `three/WalkControls.tsx`, `three/loaders.ts` (glTF/Draco/Meshopt, OBJ/FBX/STL → GLB conversion).
+Not yet verified: the 3D viewer and the import wizard haven't been run in a real browser, because no browser was available in the build sandbox. Check these first after `npm run dev`.
 
-## Remaining (next steps, in order)
+## Next steps (suggested)
 
-1. `client/src/pages/AssetLibraryPage.tsx`: asset grid (thumbnail, category, size, licence; edit and delete) and a kit editor (slot → asset, infrastructure decorations and spacing, angle tolerance). `main.tsx` already imports it, so the client won't build until this file exists.
-2. `npm install`, then `npm run typecheck`, `npm test` and `npm run build`. Fix any errors.
-3. Run end to end: upload the sample plan, calibrate, detect, view in 3D, then screenshot and check.
-4. Write `README.md`: setup, PostgreSQL/Prisma, S3, the asset workflow, and the 3DAssets.dev licence note.
-5. Git: `git init`, commit, and push to GitHub user `nicholaswilliamdavies4043-wq`. GitHub was blocked from the build sandbox, so the push has to run from this PC (commands go in the README).
-
-## Notes
-
-- The sample plan (`445 S7S8.jpg`) is customer site data and is git-ignored (`samples/`). Don't commit it to a public repo.
-- Debug detection: `npx tsx server/scripts/detect-sample.ts <plan.jpg> out.png x0,y0,x1,y1 "ex0,ey0,ex1,ey1"`.
+1. Browser check: walk-through controls, asset preview and thumbnail capture, GLB export.
+2. Generate and migrate Prisma against a real PostgreSQL. This wasn't possible in the build sandbox because Prisma engine downloads were blocked.
+3. Detection on low-resolution scans: gaps where annotation (brow markers, hatching) crosses a drive are fixed by hand today. Options: a larger bridge distance, or learning the annotation symbols.
+4. Multi-level: ramps and shafts that connect plans at different RLs.
+5. PDF plan upload (rasterise on the server).
+6. Lighting and infrastructure presets, and level-of-detail for very large mines.
