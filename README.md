@@ -9,6 +9,19 @@ A web app that turns a 2D underground mine plan into a navigable 3D model. It bu
 5. Assemble the model from a tunnel kit: imported GLB modules, or the built-in parametric pieces where no asset fits.
 6. Explore it in an overview (with the plan draped underneath) or walk through it first-person with collision. Export the result as a GLB.
 
+### Saving and sharing projects
+
+- **Download project** (project page) saves everything as one `.mine3d` file: the plans and their images, your edits, the kit and the 3D assets it uses.
+- **Open project file** (projects page) loads a `.mine3d` file on any PC running the app. Assets already in the library are reused, and the project opens as a new copy.
+- **Export GLB** (3D viewer) saves the assembled model for Blender, Deswik, Unity or any glTF viewer.
+
+### Interface
+
+- Dark and light themes (switch in the top bar).
+- Blender-style plan editor with a tool rail (shortcuts V H C R X D S), collapsible properties and a status bar showing pixel, easting/northing and zoom.
+- Precise drawing tools: a crosshair and a 4× magnifier (M), live length and bearing readouts, a 15° angle lock (Shift), snapping (N, or Ctrl to place without snapping) and arrow-key nudging of junctions.
+- Every parameter has an (i) tip, and **Info & parameters** in the left rail explains every input in full.
+
 ## Stack
 
 | Part | Tech |

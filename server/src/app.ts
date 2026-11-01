@@ -8,6 +8,7 @@ import type { Store } from './store';
 import type { ObjectStorage } from './storage';
 import { projectRoutes } from './routes/projects';
 import { assetRoutes } from './routes/assets';
+import { portableRoutes } from './routes/portable';
 import { HttpError } from './routes/util';
 
 export function createApp(store: Store, storage: ObjectStorage) {
@@ -16,6 +17,7 @@ export function createApp(store: Store, storage: ObjectStorage) {
   app.use(express.json({ limit: '50mb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, store: store.kind, storage: config.storage }));
+  app.use('/api', portableRoutes(store, storage)); // before projectRoutes so /projects/import is not taken as an id
   app.use('/api', projectRoutes(store, storage));
   app.use('/api', assetRoutes(store, storage));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));

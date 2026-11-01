@@ -1,5 +1,10 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Icon } from '../ui/Icon';
+import { InfoTip, L } from '../ui/help';
+import { usePageChrome } from '../ui/shell';
+import { useTheme } from '../ui/theme';
+import { useToast } from '../ui/toast';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -81,6 +86,10 @@ export function ViewerPage() {
   const [speed, setSpeed] = useState(6);
   const [planIds, setPlanIds] = useState<Set<string> | null>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const { theme } = useTheme();
+  const nav = useNavigate();
+  const toast = useToast();
+  usePageChrome([{ label: 'Projects', to: '/' }, { label: project?.name ?? '…', to: `/projects/${projectId}` }, { label: '3D model' }]);
 
   useEffect(() => {
     Promise.all([api.project(projectId!), api.assets(), api.kits()])
@@ -105,7 +114,7 @@ export function ViewerPage() {
   }, [project, assets, kits, planIds]);
 
   if (error) return <div className="page"><div className="error-box">{error}</div></div>;
-  if (!project || !built) return <div className="page">Loading…</div>;
+  if (!project || !built) return <div className="page"><div className="skeleton" style={{ height: 500 }} /></div>;
   const { assembly } = built;
   const s = assembly.stats;
 
@@ -114,15 +123,19 @@ export function ViewerPage() {
     try {
       const glb = await exportGlb(groupRef.current);
       downloadBlob(glb, `${project.name.replace(/[^\w.-]+/g, '_')}.glb`, 'model/gltf-binary');
+      toast('GLB exported');
     } catch (e: any) {
       setError(`Export failed: ${e.message}`);
     }
   };
 
+  const bg = mode === 'walk' ? '#0b0908' : theme === 'dark' ? '#141210' : '#e9e5df';
+
   return (
-    <div className="viewer" style={{ flex: 1 }}>
-      <Canvas camera={{ fov: 60, near: 0.1, far: 20000 }} gl={{ antialias: true, preserveDrawingBuffer: true }} onCreated={({ gl }) => { gl.setClearColor('#1b1b1b'); }}>
-        <fog attach="fog" args={['#1b1b1b', mode === 'walk' ? 25 : 2000, mode === 'walk' ? 160 : 8000]} />
+    <div className="viewer">
+      <Canvas camera={{ fov: 60, near: 0.1, far: 20000 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
+        <color attach="background" args={[bg]} />
+        <fog attach="fog" args={[bg, mode === 'walk' ? 25 : 2000, mode === 'walk' ? 160 : 8000]} />
         <hemisphereLight args={['#d8d4cc', '#2a2622', mode === 'walk' ? 0.25 : 1.1]} />
         <directionalLight position={[200, 400, 150]} intensity={mode === 'walk' ? 0.1 : 1.2} />
         {mode === 'walk' && <Headlamp />}
@@ -136,52 +149,58 @@ export function ViewerPage() {
         {mode === 'orbit' ? (<><OrbitControls makeDefault enableDamping /><FitCamera assembly={assembly} /></>) : <WalkControls assembly={assembly} collide={collide} speed={speed} />}
       </Canvas>
       {mode === 'walk' && <div className="crosshair" />}
-      <div className="panel stack">
-        <div className="row small"><Link to={`/projects/${projectId}`} style={{ color: '#327dff' }}>Back to project</Link></div>
-        <h2 style={{ margin: 0 }}>{project.name}</h2>
-        <div className="row">
-          <button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')}>Overview</button>
-          <button className={mode === 'walk' ? 'active' : ''} onClick={() => setMode('walk')} disabled={!assembly.spawn}>Walk through</button>
+      {mode === 'walk' && <div className="hint">Click to look around · <kbd>W A S D</kbd> move · <kbd>Shift</kbd> run · <kbd>Esc</kbd> release mouse</div>}
+      <div className="panel3d stack">
+        <div className="row" style={{ flexWrap: 'nowrap' }}>
+          <h2 style={{ margin: 0, flex: 1 }}>{project.name}</h2>
+          <button className="icon-btn" title="Back to project" onClick={() => nav(`/projects/${projectId}`)}><Icon name="x" size={16} /></button>
         </div>
-        {mode === 'walk' && <p className="small muted" style={{ margin: 0 }}>Click the view to look around. W A S D to move, Shift to run, Esc to release the mouse.</p>}
+        <div className="seg" role="tablist">
+          <button className={mode === 'orbit' ? 'on' : ''} onClick={() => setMode('orbit')}><Icon name="orbit" size={15} /> Overview</button>
+          <button className={mode === 'walk' ? 'on' : ''} onClick={() => setMode('walk')} disabled={!assembly.spawn}><Icon name="walk" size={15} /> Walk through</button>
+          <InfoTip k={mode === 'walk' ? 'viewWalk' : 'viewOverview'} />
+        </div>
+        <div className="stats">
+          <div className="stat"><div className="v">{s.lengthM >= 1000 ? `${(s.lengthM / 1000).toFixed(2)} km` : `${s.lengthM.toFixed(0)} m`}</div><div className="k">drives</div></div>
+          <div className="stat"><div className="v">{s.straightModules}</div><div className="k">modules</div></div>
+          <div className="stat"><div className="v">{assembly.stopes.length}</div><div className="k">stopes</div></div>
+        </div>
         <dl className="kv">
           <dt>Kit</dt><dd>{built.kitName}</dd>
-          <dt>Drives</dt><dd>{s.drives} · {s.lengthM.toFixed(0)} m</dd>
-          <dt>Straight modules</dt><dd>{s.straightModules}</dd>
           <dt>Kit junctions</dt><dd>{s.assetJunctions}</dd>
           <dt>Fitted connectors</dt><dd>{s.parametricConnectors}</dd>
           <dt>Dead ends</dt><dd>{s.deadEnds}</dd>
           {s.decorations > 0 && (<><dt>Infrastructure</dt><dd>{s.decorations}</dd></>)}
-          <dt>Stopes</dt><dd>{assembly.stopes.length}</dd>
         </dl>
         {project.plans.length > 1 && (
-          <div className="stack">
+          <div className="stack" style={{ gap: 6 }}>
             <strong className="small">Levels</strong>
             {project.plans.map((p) => (
-              <label key={p.id} className="inline small">
+              <label key={p.id} className="toggle">
                 <input type="checkbox" checked={planIds!.has(p.id)} onChange={(e) => {
                   const n = new Set(planIds);
                   e.target.checked ? n.add(p.id) : n.delete(p.id);
                   setPlanIds(n);
-                }} /> {p.name} (RL {p.levelRL})
+                }} /><span className="track" /> {p.name} · RL {p.levelRL}
               </label>
             ))}
           </div>
         )}
-        <label className="inline small"><input type="checkbox" checked={showStopes} onChange={(e) => setShowStopes(e.target.checked)} /> Show stopes</label>
+        <div className="divider" />
+        <label className="toggle"><input type="checkbox" checked={showStopes} onChange={(e) => setShowStopes(e.target.checked)} /><span className="track" /> Show stopes</label>
         {mode === 'orbit' && (
-          <label className="field" style={{ color: '#9d9d9d' }}>Plan underlay
+          <label className="field"><L k="underlay">Plan underlay {Math.round(underlay * 100)}%</L>
             <input type="range" min={0} max={1} step={0.05} value={underlay} onChange={(e) => setUnderlay(Number(e.target.value))} /></label>
         )}
         {mode === 'walk' && (
           <>
-            <label className="inline small"><input type="checkbox" checked={collide} onChange={(e) => setCollide(e.target.checked)} /> Stay inside drives</label>
-            <label className="field" style={{ color: '#9d9d9d' }}>Walking speed {speed} m/s
+            <label className="toggle"><input type="checkbox" checked={collide} onChange={(e) => setCollide(e.target.checked)} /><span className="track" /><L k="collision">Stay inside drives</L></label>
+            <label className="field">Walking speed {speed} m/s
               <input type="range" min={1} max={20} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} /></label>
           </>
         )}
-        <button onClick={exportModel}>Export GLB</button>
-        {[...built.warnings, ...assetErrors].map((w) => <div key={w} className="small" style={{ color: '#ffd74b' }}>{w}</div>)}
+        <button onClick={exportModel} style={{ justifyContent: 'center' }}><Icon name="download" size={16} /> Export GLB <InfoTip k="exportGlb" /></button>
+        {[...built.warnings, ...assetErrors].map((w) => <div key={w} className="warn-box small">{w}</div>)}
       </div>
     </div>
   );

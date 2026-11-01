@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { ASSET_CATEGORIES, KIT_SLOTS, type Asset, type Kit, type KitSlot } from '@mineplan/shared';
 import { api } from '../api';
 import { AssetImportWizard } from '../components/AssetImportWizard';
+import { Icon } from '../ui/Icon';
+import { InfoTip, L } from '../ui/help';
+import { usePageChrome } from '../ui/shell';
+import { useToast } from '../ui/toast';
 
 const catLabel = (c: string) => ASSET_CATEGORIES.find((x) => x.value === c)?.label ?? c;
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -10,6 +14,7 @@ function KitEditor({ kit, assets, onSaved, onDeleted }: { kit: Kit; assets: Asse
   const [draft, setDraft] = useState<Kit>(kit);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  const toast = useToast();
   useEffect(() => { setDraft(kit); setSaved(true); }, [kit]);
   const change = (k: Kit) => { setDraft(k); setSaved(false); };
 
@@ -22,6 +27,7 @@ function KitEditor({ kit, assets, onSaved, onDeleted }: { kit: Kit; assets: Asse
       onSaved(k);
       setSaved(true);
       setError(null);
+      toast(`Kit "${k.name}" saved`);
     } catch (e: any) {
       setError(e.message);
     }
@@ -43,7 +49,7 @@ function KitEditor({ kit, assets, onSaved, onDeleted }: { kit: Kit; assets: Asse
       </div>
       {error && <div className="error-box small">{error}</div>}
       <table className="list">
-        <thead><tr><th>Slot</th><th>Asset</th><th>Openings</th></tr></thead>
+        <thead><tr><th><L k="kitSlots">Slot</L></th><th>Asset</th><th>Openings</th></tr></thead>
         <tbody>
           {KIT_SLOTS.map(({ slot, label, category, required }) => {
             const id = draft.slots[slot] ?? '';
@@ -67,7 +73,7 @@ function KitEditor({ kit, assets, onSaved, onDeleted }: { kit: Kit; assets: Asse
         </tbody>
       </table>
       <div className="stack">
-        <strong className="small">Infrastructure along drives</strong>
+        <strong className="small row">Infrastructure along drives <InfoTip k="decorations" /></strong>
         {draft.decorations.map((d, i) => (
           <div key={i} className="row">
             <select value={d.assetId} onChange={(e) => change({ ...draft, decorations: draft.decorations.map((x, j) => (j === i ? { ...x, assetId: e.target.value } : x)) })}>
@@ -85,7 +91,7 @@ function KitEditor({ kit, assets, onSaved, onDeleted }: { kit: Kit; assets: Asse
           </button>
         </div>
       </div>
-      <label className="field">Junction angle tolerance (degrees). Junctions outside it use fitted connectors.
+      <label className="field"><L k="angleTolerance">Junction angle tolerance (degrees)</L>
         <input type="number" min={1} max={45} value={draft.angleToleranceDeg} onChange={(e) => change({ ...draft, angleToleranceDeg: Number(e.target.value) })} />
       </label>
     </div>
@@ -98,6 +104,8 @@ export function AssetLibraryPage() {
   const [wizard, setWizard] = useState<{ existing?: Asset } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
+  const chrome = usePageChrome([{ label: 'Asset library' }], { search: true });
+  const toast = useToast();
 
   const load = () => {
     api.assets().then(setAssets).catch((e) => setError(e.message));
@@ -105,68 +113,78 @@ export function AssetLibraryPage() {
   };
   useEffect(load, []);
 
-  const shown = (assets ?? []).filter((a) => !filter || a.category === filter);
+  const q = chrome.query.trim().toLowerCase();
+  const shown = (assets ?? []).filter((a) => (!filter || a.category === filter) && (!q || (a.name + ' ' + a.tags.join(' ')).toLowerCase().includes(q)));
 
   return (
     <div className="page">
-      <div className="row" style={{ alignItems: 'flex-start' }}>
-        <h1>Asset library</h1>
+      <div className="page-head">
+        <div>
+          <h1>Asset library</h1>
+          <p className="sub">
+            Reusable 3D tunnel modules (GLB/glTF) used to assemble the mine. Group them into kits and pick a kit per project.
+            Before you import, check that each file's licence allows your use. One source to look at is the "Underground Mine and Shaft Works" pack
+            on 3DAssets.dev.
+          </p>
+        </div>
         <span className="spacer" />
-        <button className="primary" onClick={() => setWizard({})}>Import asset</button>
+        <button className="primary" onClick={() => setWizard({})}><Icon name="upload" size={16} /> Import asset</button>
       </div>
-      <p className="muted" style={{ maxWidth: 720, marginTop: 0 }}>
-        Reusable 3D tunnel modules (GLB/glTF) used to assemble the mine. Group them into kits and pick a kit per project.
-        Before you import, check that each file's licence allows your use. One source to look at is the "Underground Mine and Shaft Works" pack
-        on 3DAssets.dev.
-      </p>
       {error && <div className="error-box">{error}</div>}
 
-      <div className="row" style={{ margin: '16px 0' }}>
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="">All categories</option>
-          {ASSET_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <span className="muted small">{assets ? `${shown.length} of ${assets.length} assets` : 'Loading…'}</span>
+      <div className="seg" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
+        <button className={!filter ? 'on' : ''} onClick={() => setFilter('')}>All {assets ? `(${assets.length})` : ''}</button>
+        {ASSET_CATEGORIES.map((c) => {
+          const n = (assets ?? []).filter((a) => a.category === c.value).length;
+          return n ? <button key={c.value} className={filter === c.value ? 'on' : ''} onClick={() => setFilter(c.value)}>{c.label} ({n})</button> : null;
+        })}
       </div>
       {assets && assets.length === 0 && (
         <div className="empty">No assets yet. Import a straight drive module first; projects use the built-in parametric kit until then.</div>
       )}
-      <div className="grid">
+      <div className="grid stagger">
         {shown.map((a) => {
           const thumb = api.assetThumbUrl(a);
           return (
-            <div key={a.id} className="card stack">
-              {thumb ? <img className="thumb" src={thumb} alt="" /> : <div className="thumb" />}
-              <strong>{a.name}</strong>
-              <div className="row small">
-                <span className="badge">{catLabel(a.category)}</span>
-                <span className="muted">{r1(a.meta.dims.length)} × {r1(a.meta.dims.width)} × {r1(a.meta.dims.height)} m</span>
+            <div key={a.id} className="card hover stack" style={{ padding: 12 }}>
+              {thumb ? <img className="thumb" src={thumb} alt="" /> : <div className="thumb" style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)' }}><Icon name="cube" size={40} /></div>}
+              <div className="row" style={{ flexWrap: 'nowrap', padding: '0 4px' }}>
+                <strong style={{ flex: 1 }}>{a.name}</strong>
+                <span className="badge accent">{catLabel(a.category)}</span>
               </div>
-              <div className="small muted">
-                Openings: {a.meta.connectors.map((c) => c.side).join(' ') || 'none'} · {a.license || 'licence not recorded'}
+              <div className="stats" style={{ padding: '0 4px' }}>
+                <div className="stat"><div className="v">{r1(a.meta.dims.length)}</div><div className="k">length m</div></div>
+                <div className="stat"><div className="v">{r1(a.meta.dims.width)}</div><div className="k">width m</div></div>
+                <div className="stat"><div className="v">{r1(a.meta.dims.height)}</div><div className="k">height m</div></div>
               </div>
-              <div className="row">
-                <button onClick={() => setWizard({ existing: a })}>Edit</button>
-                <button className="danger" onClick={async () => {
+              <div className="small muted" style={{ padding: '0 4px' }}>
+                Openings {a.meta.connectors.map((c) => c.side).join(' ') || 'none'} · {a.license || 'licence not recorded'}
+              </div>
+              <div className="row" style={{ padding: '0 4px 4px' }}>
+                <button onClick={() => setWizard({ existing: a })}><Icon name="settings" size={15} /> Edit</button>
+                <span className="spacer" />
+                <button className="ghost" aria-label="Delete asset" onClick={async () => {
                   if (!confirm(`Delete "${a.name}"? It is removed from any kit that uses it.`)) return;
                   await api.deleteAsset(a.id);
+                  toast('Asset deleted', 'info');
                   load();
-                }}>Delete</button>
+                }}><Icon name="trash" size={15} /></button>
               </div>
             </div>
           );
         })}
       </div>
 
-      <div className="row" style={{ marginTop: 48, alignItems: 'flex-start' }}>
-        <h2>Kits</h2>
+      <div className="page-head" style={{ marginTop: 44 }}>
+        <div><h2 style={{ margin: 0 }}>Kits</h2></div>
         <span className="spacer" />
         <button onClick={async () => {
           try {
             const k = await api.createKit({ name: `Kit ${kits.length + 1}`, slots: {}, decorations: [], angleToleranceDeg: 20 });
             setKits([...kits, k]);
+            toast('Kit created');
           } catch (e: any) { setError(e.message); }
-        }}>New kit</button>
+        }}><Icon name="plus" size={15} /> New kit</button>
       </div>
       <p className="muted small" style={{ marginTop: 0 }}>
         A kit maps library assets to slots. Straights are tiled along drives. T, cross and bend pieces are placed where a junction's angles match within the
@@ -182,7 +200,7 @@ export function AssetLibraryPage() {
       </div>
 
       {wizard && (
-        <AssetImportWizard existing={wizard.existing} onClose={() => setWizard(null)} onSaved={() => { setWizard(null); load(); }} />
+        <AssetImportWizard existing={wizard.existing} onClose={() => setWizard(null)} onSaved={(a) => { setWizard(null); load(); toast(`"${a.name}" saved to the library`); }} />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
-  defaultDetectionParams, defaultProfile, emptyNetwork, uid, type DetectionParams, type Plan, type PlanNetwork, type Project,
+  defaultDetectionParams, defaultProfile, emptyNetwork, fitSimilarity, networkLength, scaleOf, uid, type DetectionParams, type Plan, type PlanNetwork, type Project,
 } from '@mineplan/shared';
 import type { Store } from '../store';
 import type { ObjectStorage } from '../storage';
@@ -60,6 +60,14 @@ async function loadImage(storage: ObjectStorage, plan: Plan): Promise<RGBAImage>
   return img;
 }
 
+function networkBBox(plan: Plan): [number, number, number, number] {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const e of plan.network.edges) for (const q of e.points) {
+    x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]);
+  }
+  return isFinite(x0) ? [x0, y0, x1, y1] : [0, 0, plan.imageWidth, plan.imageHeight];
+}
+
 function mergeNetworks(a: PlanNetwork, b: PlanNetwork): PlanNetwork {
   return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges], stopes: [...a.stopes, ...b.stopes] };
 }
@@ -71,7 +79,28 @@ export function projectRoutes(store: Store, storage: ObjectStorage): Router {
   r.get('/projects', ah(async (_req, res) => {
     const projects = await store.projects.list();
     const plans = await store.plans.list();
-    res.json(projects.map((p) => ({ ...p, planCount: plans.filter((x) => x.projectId === p.id).length })));
+    res.json(projects.map((p) => {
+      const mine = plans.filter((x) => x.projectId === p.id);
+      let lengthM = 0, stopes = 0, junctions = 0;
+      for (const pl of mine) {
+        const mpp = scaleOf(fitSimilarity(pl.georef));
+        lengthM += networkLength(pl.network) * mpp;
+        stopes += pl.network.stopes.length;
+        junctions += pl.network.nodes.length;
+      }
+      // light-weight preview of the first plan that has drives (rounded centrelines only)
+      const first = mine.find((x) => x.network.edges.length) ?? mine[0];
+      const preview = first ? {
+        planId: first.id, width: first.imageWidth, height: first.imageHeight,
+        bbox: networkBBox(first),
+        edges: first.network.edges.map((e) => e.points.map((q) => [Math.round(q[0]), Math.round(q[1])])),
+        stopes: first.network.stopes.map((s) => s.polygon.map((q) => [Math.round(q[0]), Math.round(q[1])])),
+      } : null;
+      return {
+        ...p, planCount: mine.length, lengthM: Math.round(lengthM), stopes, junctions,
+        levels: mine.map((x) => x.levelRL), preview,
+      };
+    }));
   }));
 
   r.post('/projects', ah(async (req, res) => {

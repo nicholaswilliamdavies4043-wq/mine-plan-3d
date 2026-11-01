@@ -8,6 +8,8 @@ import {
 } from '@mineplan/shared';
 import { api } from '../api';
 import { convertToGlb, loadGltfFromFiles, loadGltfUrl } from '../three/loaders';
+import { InfoTip, L } from '../ui/help';
+import { Icon } from '../ui/Icon';
 import { autoPivot, bboxOf, connectorsFor, defaultMeta, detectOpenings, orientedWrapper, suggestFromOpenings, type FrameInfo } from './assetAnalysis';
 
 interface Props {
@@ -34,7 +36,7 @@ function Preview({ object, meta, box, onReady }: { object: THREE.Object3D | null
   });
   return (
     <Canvas camera={{ position: [size * 1.2, size * 0.9, size * 1.4], fov: 50, near: size / 1000, far: size * 100 }}
-      gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => { gl.setClearColor('#1b1b1b'); onReady(gl); }}>
+      gl={{ preserveDrawingBuffer: true, antialias: true }} onCreated={({ gl }) => { gl.setClearColor(getComputedStyle(document.documentElement).getPropertyValue('--viewer-bg').trim() || '#141210'); onReady(gl); }}>
       <hemisphereLight args={['#ffffff', '#444444', 1.4]} />
       <directionalLight position={[5, 10, 7]} intensity={1.5} />
       {wrapper && <primitive object={wrapper} />}
@@ -224,7 +226,7 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
             <div className="stack">
               <h3>{existing ? '1' : '2'}. Units and orientation</h3>
               <div className="row">
-                <label className="field">Model units
+                <label className="field"><L k="assetUnits">Model units</L>
                   <select value={customUnit ? 'custom' : String(meta.unitScale)} onChange={(e) => {
                     if (e.target.value === 'custom') { setCustomUnit(true); return; }
                     setCustomUnit(false);
@@ -236,18 +238,18 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
                   </select>
                 </label>
                 {customUnit && <label className="field">Metres per unit<input type="number" step="any" value={meta.unitScale} onChange={(e) => setMeta({ ...meta, unitScale: Math.max(1e-6, Number(e.target.value)) })} /></label>}
-                <label className="field">Up axis
+                <label className="field"><L k="assetUp">Up axis</L>
                   <select value={meta.upAxis} onChange={(e) => setMeta({ ...meta, upAxis: e.target.value as UpAxis })}>
                     <option value="Y">Y up (glTF)</option><option value="Z">Z up (CAD)</option>
                   </select>
                 </label>
-                <label className="field">Forward (drive axis)
+                <label className="field"><L k="assetForward">Forward (drive axis)</L>
                   <select value={meta.forward} onChange={(e) => setMeta({ ...meta, forward: e.target.value as ForwardAxis })}>
                     {(['+X', '-X', '+Z', '-Z'] as ForwardAxis[]).map((f) => <option key={f} value={f}>{f}</option>)}
                   </select>
                 </label>
               </div>
-              <button onClick={autoDetect} disabled={!object}>Auto-detect openings, category and forward axis</button>
+              <button onClick={autoDetect} disabled={!object}><Icon name="wand" size={15} /> Auto-detect openings, category and forward axis</button>
               {orientedBox && (
                 <span className="small muted">Size: {round(meta.dims.length)} m long (X) × {round(meta.dims.width)} m wide (Z) × {round(meta.dims.height)} m high. Red axis = forward, green = up.</span>
               )}
@@ -261,7 +263,7 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
                   {ASSET_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </label>
-              <div className="small muted">Openings (blue in the preview)</div>
+              <div className="small muted row">Openings (blue in the preview) <InfoTip k="assetOpenings" /></div>
               <div className="row">
                 {SIDES.map((s) => (
                   <label key={s} className="inline small">
@@ -278,13 +280,13 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
                 </div>
               ))}
               <div className="row">
-                <label className="field">Opening width (m)<input type="number" step="0.1" value={meta.crossSection.width} onChange={(e) => setMeta({ ...meta, crossSection: { ...meta.crossSection, width: Number(e.target.value) } })} /></label>
+                <label className="field"><L k="assetCrossSection">Opening width (m)</L><input type="number" step="0.1" value={meta.crossSection.width} onChange={(e) => setMeta({ ...meta, crossSection: { ...meta.crossSection, width: Number(e.target.value) } })} /></label>
                 <label className="field">Opening height (m)<input type="number" step="0.1" value={meta.crossSection.height} onChange={(e) => setMeta({ ...meta, crossSection: { ...meta.crossSection, height: Number(e.target.value) } })} /></label>
               </div>
-              <label className="field">Connection type (pieces with the same type join cleanly)
+              <label className="field"><L k="connectionType">Connection type</L>
                 <input value={meta.connectionType} onChange={(e) => setMeta({ ...meta, connectionType: e.target.value, connectors: meta.connectors.map((c) => ({ ...c, connectionType: e.target.value })) })} /></label>
-              <label className="inline small"><input type="checkbox" checked={meta.fitToDriveWidth} onChange={(e) => setMeta({ ...meta, fitToDriveWidth: e.target.checked })} /> Scale to the drive width of the plan</label>
-              <div className="small muted">Pivot offset (m) from the automatic pivot ({category === 'straight' || category === 'deadEnd' || category === 'entrance' ? 'floor centre of the start opening' : 'floor centre'})</div>
+              <label className="inline small"><input type="checkbox" checked={meta.fitToDriveWidth} onChange={(e) => setMeta({ ...meta, fitToDriveWidth: e.target.checked })} /> Scale to the drive width of the plan <InfoTip k="fitToDriveWidth" /></label>
+              <div className="small muted row"><InfoTip k="assetPivot" /> Pivot offset (m) from the automatic pivot ({category === 'straight' || category === 'deadEnd' || category === 'entrance' ? 'floor centre of the start opening' : 'floor centre'})</div>
               <div className="row">
                 {(['X', 'Y', 'Z'] as const).map((ax, i) => (
                   <label key={ax} className="field">{ax}<input type="number" step="0.05" value={pivotOffset[i]} onChange={(e) => {
@@ -297,7 +299,7 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
             </div>
 
             <div className="stack">
-              <h3>{existing ? '3' : '4'}. Source and licence</h3>
+              <h3>{existing ? '3' : '4'}. Source and licence <InfoTip k="assetLicence" /></h3>
               <label className="field">Source URL<input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://3dassets.dev/packs/underground-mine-and-shaft-works" /></label>
               <label className="field">Licence<input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="e.g. CC0, CC-BY 4.0, commercial seat licence" /></label>
               <label className="inline small"><input type="checkbox" checked={licenseConfirmed} onChange={(e) => setLicenseConfirmed(e.target.checked)} /> I have checked the licence and it permits this use</label>

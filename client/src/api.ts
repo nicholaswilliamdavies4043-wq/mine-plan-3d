@@ -20,7 +20,22 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   return data as T;
 }
 
-export type ProjectSummary = Project & { planCount: number };
+export interface ProjectPreview {
+  planId: string;
+  width: number;
+  height: number;
+  bbox: [number, number, number, number];
+  edges: [number, number][][];
+  stopes: [number, number][][];
+}
+export type ProjectSummary = Project & {
+  planCount: number;
+  lengthM: number;
+  stopes: number;
+  junctions: number;
+  levels: number[];
+  preview: ProjectPreview | null;
+};
 export type ProjectDetail = Project & { plans: Plan[] };
 
 export const api = {
@@ -29,6 +44,12 @@ export const api = {
   createProject: (name: string, description?: string) => req<Project>('POST', '/projects', { name, description }),
   updateProject: (id: string, patch: Partial<Project>) => req<Project>('PATCH', `/projects/${id}`, patch),
   deleteProject: (id: string) => req<void>('DELETE', `/projects/${id}`),
+  exportProjectUrl: (id: string) => `/api/projects/${id}/export`,
+  importProject: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return req<Project>('POST', '/projects/import', fd);
+  },
 
   uploadPlan: (projectId: string, file: File, name: string, levelRL: number) => {
     const fd = new FormData();
