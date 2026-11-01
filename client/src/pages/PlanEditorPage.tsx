@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   addPolyline, defaultDetectionParams, deleteEdges, deleteNode, fitSimilarity, mergeDegree2, moveNode, networkLength,
-  polygonArea, polylineLength, pxToWorld, residuals, rotationOf, scaleOf, uid,
-  type DetectionParams, type DetectionResult, type GeoRef, type Plan, type PlanNetwork, type Polygon, type Vec2,
+  polygonArea, polylineLength, pxToWorld, residuals, rotationOf, scaleOf, straightRun, uid, DRIVE_KINDS,
+  type DriveKind, type DetectionParams, type DetectionResult, type GeoRef, type Plan, type PlanNetwork, type Polygon, type Vec2,
 } from '@mineplan/shared';
 import { api } from '../api';
 import { PlanCanvas, type Selection, type Tool } from '../components/PlanCanvas';
 import { Icon, type IconName } from '../ui/Icon';
-import { HelpBrowser, L } from '../ui/help';
+import { HelpBrowser, InfoTip, L } from '../ui/help';
 import { usePageChrome } from '../ui/shell';
 import { useToast } from '../ui/toast';
 
@@ -242,6 +242,29 @@ export function PlanEditorPage() {
   const selEdge = selection?.kind === 'edge' ? plan.network.edges.find((e) => e.id === selection.id) : undefined;
   const selStope = selection?.kind === 'stope' ? plan.network.stopes.find((s) => s.id === selection.id) : undefined;
   const selNode = selection?.kind === 'node' ? plan.network.nodes.find((n) => n.id === selection.id) : undefined;
+  /** Rename edges; typing goes through without an undo step per keystroke, bulk renames are undoable. */
+  const renameEdges = (ids: string[], name: string, kind: DriveKind | undefined, recordHistory = false) => {
+    const set = new Set(ids);
+    const edges = plan.network.edges.map((e) => {
+      if (!set.has(e.id)) return e;
+      const n = { ...e, name: name || undefined, kind };
+      if (!n.name) delete n.name;
+      if (!n.kind) delete n.kind;
+      return n;
+    });
+    update({ network: { ...plan.network, edges } }, { recordHistory });
+  };
+  const namedDrives = (() => {
+    const m = new Map<string, { count: number; first: string; kind?: DriveKind; len: number }>();
+    for (const e of plan.network.edges) {
+      if (!e.name) continue;
+      const cur = m.get(e.name) ?? { count: 0, first: e.id, kind: e.kind, len: 0 };
+      cur.count++;
+      cur.len += polylineLength(e.points) * mpp;
+      m.set(e.name, cur);
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  })();
   const setStope = (id: string, patch: Record<string, unknown>) =>
     update({ network: { ...plan.network, stopes: plan.network.stopes.map((s) => (s.id === id ? { ...s, ...patch } : s)) } });
   const cursorWorld = cursor ? pxToWorld(sim, cursor) : null;
@@ -365,6 +388,20 @@ export function PlanEditorPage() {
                   <div className="inner" style={{ paddingTop: 12 }}>
                     {selEdge && (<>
                       <strong>Drive segment</strong>
+                      <label className="field"><L k="driveName">Name</L>
+                        <input value={selEdge.name ?? ''} placeholder="e.g. XC 3, 445 S6S7 ore drive" onChange={(e) => renameEdges([selEdge.id], e.target.value, selEdge.kind)} />
+                      </label>
+                      <label className="field"><L k="driveKind">Type</L>
+                        <select value={selEdge.kind ?? ''} onChange={(e) => renameEdges([selEdge.id], selEdge.name ?? '', (e.target.value || undefined) as DriveKind | undefined)}>
+                          <option value="">Not set</option>
+                          {DRIVE_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                        </select>
+                      </label>
+                      <button disabled={!selEdge.name} onClick={() => {
+                        const ids = straightRun(plan.network, selEdge.id);
+                        renameEdges(ids, selEdge.name ?? '', selEdge.kind, true);
+                        toast(`Named ${ids.length} segment${ids.length === 1 ? '' : 's'} "${selEdge.name}"`);
+                      }}><Icon name="ruler" size={15} /> Apply name to the whole straight run</button>
                       <dl className="kv">
                         <dt>Length</dt><dd>{(polylineLength(selEdge.points) * mpp).toFixed(1)} m</dd>
                         {selEdge.widthPx ? (<><dt>Width (plan)</dt><dd>{(selEdge.widthPx * mpp).toFixed(1)} m</dd></>) : null}
@@ -495,6 +532,17 @@ export function PlanEditorPage() {
                   <dt>Drives</dt><dd>{plan.network.edges.length} segments · {(networkLength(plan.network) * mpp).toFixed(0)} m</dd>
                   <dt>Stopes</dt><dd>{plan.network.stopes.length}</dd>
                 </dl>
+                <div className="stack" style={{ gap: 6 }}>
+                  <strong className="small row">Named drives &amp; crosscuts <InfoTip k="driveName" /></strong>
+                  {!namedDrives.length && <span className="small muted">None yet. Select a drive and give it a name; the names appear as signs in the walk-through.</span>}
+                  {namedDrives.map(([name, info]) => (
+                    <button key={name} className="ghost sm" style={{ justifyContent: 'flex-start' }} onClick={() => { setTool('select'); setSelection({ kind: 'edge', id: info.first }); }}>
+                      <span className="badge accent">{DRIVE_KINDS.find((k) => k.value === info.kind)?.label ?? 'Drive'}</span>
+                      <span style={{ flex: 1, textAlign: 'left' }}>{name}</span>
+                      <span className="muted tiny">{info.len.toFixed(0)} m</span>
+                    </button>
+                  ))}
+                </div>
                 <div className="row">
                   <button className="primary" disabled={!plan.network.edges.length} style={{ flex: 1, justifyContent: 'center' }}
                     onClick={async () => { await flush(); nav(`/projects/${projectId}/view`); }}><Icon name="play" size={16} /> Build 3D model</button>

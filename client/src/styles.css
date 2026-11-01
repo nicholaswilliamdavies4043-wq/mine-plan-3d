@@ -455,6 +455,13 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; }
   background: var(--surface-glass); border: 1px solid var(--border); border-radius: 18px; backdrop-filter: blur(18px); animation: slide-in-right 0.4s var(--ease);
 }
 .viewer .crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(255,255,255,.8); box-shadow: 0 0 0 2px rgba(0,0,0,.35); pointer-events: none; }
+.location-hud {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; border-radius: 14px; background: rgba(16, 16, 16, 0.82); color: #fff; border: 1px solid rgba(255,255,255,0.12);
+  backdrop-filter: blur(12px); font-size: 14px; white-space: nowrap; box-shadow: var(--shadow);
+}
+.location-hud .muted { color: #b8afa6; font-size: 12px; }
+.location-hud strong { font-size: 15px; }
 .viewer .hud { position: absolute; left: 14px; bottom: 14px; z-index: 2; display: flex; gap: 6px; }
 .hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: var(--surface-glass); color: var(--text-2); padding: 7px 14px; border-radius: 12px; font-size: 12px; z-index: 3; border: 1px solid var(--border); backdrop-filter: blur(12px); max-width: 80%; text-align: center; }
 

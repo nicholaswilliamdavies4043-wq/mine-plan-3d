@@ -109,6 +109,11 @@ export function assetRoutes(store: Store, storage: ObjectStorage): Router {
       const decorations = (k.decorations ?? []).filter((d) => d.assetId !== req.params.id);
       if (changed || decorations.length !== (k.decorations ?? []).length) await store.kits.update(k.id, { slots, decorations });
     }
+    // remove placed inventory items that use it
+    for (const p of await store.projects.list()) {
+      const items = p.items ?? [];
+      if (items.some((i) => i.assetId === req.params.id)) await store.projects.update(p.id, { items: items.filter((i) => i.assetId !== req.params.id) });
+    }
     await storage.deletePrefix(`assets/${req.params.id}`);
     await store.assets.delete(req.params.id);
     res.status(204).end();

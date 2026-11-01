@@ -127,8 +127,15 @@ export function mergeDegree2(net: PlanNetwork): PlanNetwork {
       const a = e1.b === n.id ? e1.a : e1.b;
       const b = e2.a === n.id ? e2.b : e2.a;
       if (a === n.id || b === n.id) continue;
+      // never merge two drives that the user named differently
+      if (e1.name && e2.name && e1.name !== e2.name) continue;
       const w = e1.widthPx && e2.widthPx ? (e1.widthPx + e2.widthPx) / 2 : e1.widthPx ?? e2.widthPx;
-      const merged: NetEdge = { id: uid('e'), a, b, points: [...p1, ...p2.slice(1)], widthPx: w };
+      const merged: NetEdge = {
+        id: uid('e'), a, b, points: [...p1, ...p2.slice(1)], widthPx: w,
+        name: e1.name || e2.name, kind: e1.kind ?? e2.kind,
+      };
+      if (!merged.name) delete merged.name;
+      if (!merged.kind) delete merged.kind;
       edges = edges.filter((e) => e.id !== e1.id && e.id !== e2.id);
       edges.push(merged);
       nodes = nodes.filter((x) => x.id !== n.id);
@@ -137,6 +144,60 @@ export function mergeDegree2(net: PlanNetwork): PlanNetwork {
     }
   }
   return { ...net, nodes, edges };
+}
+
+/**
+ * The edges forming one continuous drive through `edgeId`: from each end, continue through
+ * junctions into the branch that carries straight on (turn below `maxTurnDeg`). Used to name a
+ * whole drive or crosscut in one go.
+ */
+export function straightRun(net: PlanNetwork, edgeId: string, maxTurnDeg = 35): string[] {
+  const start = net.edges.find((e) => e.id === edgeId);
+  if (!start) return [];
+  const run = new Set<string>([start.id]);
+  const byNode = new Map<string, NetEdge[]>();
+  for (const e of net.edges) {
+    for (const nid of [e.a, e.b]) {
+      if (!byNode.has(nid)) byNode.set(nid, []);
+      byNode.get(nid)!.push(e);
+    }
+  }
+  // direction arriving at node `nid` along edge e (pointing into the node)
+  const arriving = (e: NetEdge, nid: string): Vec2 => {
+    const pts = e.b === nid ? e.points : e.points.slice().reverse();
+    const q = pts[pts.length - 1], p = pts[Math.max(0, pts.length - 3)];
+    const d: Vec2 = [q[0] - p[0], q[1] - p[1]];
+    const l = Math.hypot(d[0], d[1]) || 1;
+    return [d[0] / l, d[1] / l];
+  };
+  const leaving = (e: NetEdge, nid: string): Vec2 => {
+    const pts = e.a === nid ? e.points : e.points.slice().reverse();
+    const p = pts[0], q = pts[Math.min(pts.length - 1, 2)];
+    const d: Vec2 = [q[0] - p[0], q[1] - p[1]];
+    const l = Math.hypot(d[0], d[1]) || 1;
+    return [d[0] / l, d[1] / l];
+  };
+  const cosMax = Math.cos((maxTurnDeg * Math.PI) / 180);
+  for (const firstNode of [start.a, start.b]) {
+    let e = start;
+    let nid = firstNode;
+    for (let guard = 0; guard < 10000; guard++) {
+      const din = arriving(e, nid);
+      let best: NetEdge | null = null;
+      let bestCos = cosMax;
+      for (const o of byNode.get(nid) ?? []) {
+        if (o.id === e.id || run.has(o.id)) continue;
+        const dout = leaving(o, nid);
+        const c = din[0] * dout[0] + din[1] * dout[1];
+        if (c > bestCos) { bestCos = c; best = o; }
+      }
+      if (!best) break;
+      run.add(best.id);
+      nid = best.a === nid ? best.b : best.a;
+      e = best;
+    }
+  }
+  return [...run];
 }
 
 export function networkLength(net: PlanNetwork): number {

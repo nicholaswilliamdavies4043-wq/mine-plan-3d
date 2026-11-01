@@ -43,6 +43,8 @@ export const HELP: Record<string, HelpEntry> = {
   toolCalibrate: { group: 'Editing tools', title: 'Pick grid point (C)', text: 'Click a grid intersection to add a georeference control point, then type its coordinates in the panel.' },
   snapping: { group: 'Editing tools', title: 'Snapping', text: 'When it is on, drive ends snap to nearby junctions and drives so the network stays connected. Hold Ctrl while clicking to place a point without snapping.' },
   loupe: { group: 'Editing tools', title: 'Magnifier', text: 'Shows an enlarged view around the pointer while you draw or calibrate, so you can place points to sub-pixel precision.' },
+  driveName: { group: 'Editing tools', title: 'Drive and crosscut names', text: 'Select a drive segment and type its name, for example "XC 3" or "445 S6S7 ore drive". "Apply name to the whole straight run" names every segment that carries straight on through the junctions. Names appear as signs along the drive, and the walk-through shows which drive you are in.' },
+  driveKind: { group: 'Editing tools', title: 'Drive type', text: 'Drive, crosscut, ore drive, access, ramp or stockpile. The type is shown on the signs and in the location read-out.' },
   tidy: { group: 'Editing tools', title: 'Tidy', text: 'Merges drive segments joined end to end without a junction into single drives. This makes the next assembly cleaner.' },
   stopeBase: { group: 'Editing tools', title: 'Stope base offset (m)', text: 'Moves the stope volume up or down relative to the level floor. Use a negative value for stopes that extend below the level.' },
   // assembly
@@ -62,7 +64,12 @@ export const HELP: Record<string, HelpEntry> = {
   fitToDriveWidth: { group: 'Asset import', title: 'Scale to drive width', text: 'Uniformly scales the asset so its opening width matches the drive width being modelled.' },
   assetPivot: { group: 'Asset import', title: 'Pivot', text: 'The reference point used to place the asset. Straights and dead ends: the floor centre of the start opening. Junctions and bends: the floor centre of the piece. The offset adjusts it.' },
   assetLicence: { group: 'Asset import', title: 'Source and licence', text: 'Record where the model came from and its licence. Import is blocked until you confirm that the licence permits this use.' },
+  // inventory
+  inventory: { group: 'Inventory', title: 'Inventory items', text: 'Equipment and objects with their own 3D model (loaders, trucks, refuge chambers, pumps, signs). They are added once on the Inventory page and can be placed in any project.' },
+  itemPlace: { group: 'Inventory', title: 'Placing items', text: 'In the 3D model, open the Inventory tab and click Place on an item. In Overview, click a point in a drive to drop it there; it lands on the drive floor. In Walk through, "Place in front of me" puts it 4 m ahead of you.' },
+  itemTransform: { group: 'Inventory', title: 'Move, rotate and scale', text: 'Click a placed item to select it. Drag the arrows (Move), the ring (Rotate) or the handles (Scale) on the gizmo, or type exact values: position as easting, northing and RL, heading in degrees, and scale (1 = original size).', tip: 'Turn on "Keep in drive" to stop items being moved through walls.' },
   // viewer
+  locationHud: { group: '3D viewer', title: 'Location read-out', text: 'While walking, the bar at the top shows the name and type of the drive or crosscut you are in, with your easting, northing and RL. Name drives in the plan editor to make this useful.' },
   viewOverview: { group: '3D viewer', title: 'Overview', text: 'Orbit around the model: left-drag to rotate, right-drag to pan, wheel to zoom. Walls face inwards, so you can look into the drives from above.' },
   viewWalk: { group: '3D viewer', title: 'Walk through', text: 'A first-person view at 1.7 m eye height with a cap-lamp. Click the view to look around. Use W A S D or the arrow keys to move, Shift to run and Esc to release the mouse.' },
   collision: { group: '3D viewer', title: 'Stay inside drives', text: 'Stops you walking through walls by keeping you within the drive centrelines plus half the drive width.' },

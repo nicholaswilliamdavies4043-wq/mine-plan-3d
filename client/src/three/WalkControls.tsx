@@ -2,14 +2,19 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { clampToDrives, type Assembly } from '@mineplan/shared';
+import { clampToDrives, nearestDrive, type Assembly, type CollisionSegment } from '@mineplan/shared';
 
 const EYE = 1.7;
 
 /** First-person walk-through: click to capture the mouse, WASD/arrows to move, Shift to run, Esc to release. */
-export function WalkControls({ assembly, collide, speed }: { assembly: Assembly; collide: boolean; speed: number }) {
+export function WalkControls({ assembly, collide, speed, onLocate }: {
+  assembly: Assembly; collide: boolean; speed: number;
+  /** called a few times per second with the camera floor position and the drive it is in */
+  onLocate?: (p: { x: number; y: number; z: number }, seg: CollisionSegment | null) => void;
+}) {
   const { camera } = useThree();
   const keys = useRef<Record<string, boolean>>({});
+  const lastLocate = useRef(0);
 
   useEffect(() => {
     if (assembly.spawn) {
@@ -30,7 +35,13 @@ export function WalkControls({ assembly, collide, speed }: { assembly: Assembly;
 
   const fwd = new THREE.Vector3();
   const right = new THREE.Vector3();
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
+    if (onLocate && state.clock.elapsedTime - lastLocate.current > 0.25) {
+      lastLocate.current = state.clock.elapsedTime;
+      const y = camera.position.y - EYE;
+      const hit = nearestDrive([camera.position.x, camera.position.z], y, assembly.collision);
+      onLocate({ x: camera.position.x, y, z: camera.position.z }, hit && hit.d < hit.seg.r + 3 ? hit.seg : null);
+    }
     const k = keys.current;
     const v = speed * (k.ShiftLeft || k.ShiftRight ? 3 : 1) * Math.min(dt, 0.1);
     camera.getWorldDirection(fwd);

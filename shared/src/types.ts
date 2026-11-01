@@ -21,7 +21,22 @@ export interface NetEdge {
   points: Vec2[];
   /** Detected drive width in pixels (optional). */
   widthPx?: number;
+  /** User-given name shown on signs and in the walk-through, e.g. "XC 3" or "445 S6S7 ore drive". */
+  name?: string;
+  kind?: DriveKind;
 }
+
+export type DriveKind = 'drive' | 'crosscut' | 'access' | 'ramp' | 'oreDrive' | 'stockpile' | 'other';
+
+export const DRIVE_KINDS: { value: DriveKind; label: string }[] = [
+  { value: 'drive', label: 'Drive' },
+  { value: 'crosscut', label: 'Crosscut' },
+  { value: 'oreDrive', label: 'Ore drive' },
+  { value: 'access', label: 'Access' },
+  { value: 'ramp', label: 'Ramp / decline' },
+  { value: 'stockpile', label: 'Stockpile / cuddy' },
+  { value: 'other', label: 'Other' },
+];
 
 export interface Stope {
   id: string;
@@ -149,6 +164,19 @@ export const defaultProfile = (): TunnelProfile => ({
   useDetectedWidths: false,
 });
 
+/** An inventory item (equipment, signage, refuge chamber...) placed in the 3D model. */
+export interface PlacedItem {
+  id: string;
+  assetId: string;
+  label?: string;
+  /** World position: [Easting, Northing, elevation RL] in metres (base of the item). */
+  position: Vec3;
+  /** Heading rotation about the vertical axis, degrees (counter-clockwise seen from above). */
+  rotationDeg: number;
+  /** Scale along the item's length, height and width. */
+  scale: Vec3;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -156,6 +184,8 @@ export interface Project {
   /** Kit used for assembly; null = built-in parametric kit. */
   kitId: string | null;
   profile: TunnelProfile;
+  /** Inventory items placed in the model. */
+  items?: PlacedItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -194,6 +224,7 @@ export type AssetCategory =
   | 'deadEnd'
   | 'entrance'
   | 'infrastructure'
+  | 'item'
   | 'general';
 
 export const ASSET_CATEGORIES: { value: AssetCategory; label: string }[] = [
@@ -204,6 +235,7 @@ export const ASSET_CATEGORIES: { value: AssetCategory; label: string }[] = [
   { value: 'deadEnd', label: 'Dead end / face' },
   { value: 'entrance', label: 'Entrance / portal' },
   { value: 'infrastructure', label: 'Infrastructure (supports, pipes, trays)' },
+  { value: 'item', label: 'Inventory item (equipment, signage, refuge…)' },
   { value: 'general', label: 'General component' },
 ];
 

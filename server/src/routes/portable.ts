@@ -37,23 +37,25 @@ export function portableRoutes(store: Store, storage: ObjectStorage): Router {
       if (!img) throw new HttpError(500, `Image for plan "${plan.name}" is missing`);
       out.plans.push({ plan, image: { name: plan.imageKey.split('/').pop()!, mime: img.contentType, data: img.data.toString('base64') } });
     }
+    // assets used by the kit and by placed inventory items
+    const ids = new Set<string>((project.items ?? []).map((i) => i.assetId));
     if (project.kitId) {
       const kit = await store.kits.get(project.kitId);
       if (kit) {
         out.kit = kit;
-        const ids = new Set<string>([...Object.values(kit.slots).filter((x): x is string => !!x), ...(kit.decorations ?? []).map((d) => d.assetId)]);
-        for (const id of ids) {
-          const asset = await store.assets.get(id);
-          if (!asset) continue;
-          const files: PortableFile[] = [];
-          for (const f of asset.files) {
-            const obj = await storage.get(f.key);
-            if (obj) files.push({ name: f.name, mime: f.mime, data: obj.data.toString('base64') });
-          }
-          const thumb = asset.thumbnailKey ? await storage.get(asset.thumbnailKey) : null;
-          out.assets.push({ asset, files, thumbnail: thumb ? thumb.data.toString('base64') : null });
-        }
+        for (const id of [...Object.values(kit.slots).filter((x): x is string => !!x), ...(kit.decorations ?? []).map((d) => d.assetId)]) ids.add(id);
       }
+    }
+    for (const id of ids) {
+      const asset = await store.assets.get(id);
+      if (!asset) continue;
+      const files: PortableFile[] = [];
+      for (const f of asset.files) {
+        const obj = await storage.get(f.key);
+        if (obj) files.push({ name: f.name, mime: f.mime, data: obj.data.toString('base64') });
+      }
+      const thumb = asset.thumbnailKey ? await storage.get(asset.thumbnailKey) : null;
+      out.assets.push({ asset, files, thumbnail: thumb ? thumb.data.toString('base64') : null });
     }
     const fname = `${project.name.replace(/[^\w.-]+/g, '_') || 'project'}.mine3d`;
     res.setHeader('Content-Type', 'application/json');

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  findSnap, nearestOnPolyline, pointInPolygon, type GeoRefPoint, type PlanNetwork, type Polygon, type Vec2,
+  findSnap, nearestOnPolyline, pointAt, pointInPolygon, polylineLength, type GeoRefPoint, type PlanNetwork, type Polygon, type Vec2,
 } from '@mineplan/shared';
 import { cssVar, useTheme } from '../ui/theme';
 
@@ -277,6 +277,32 @@ export function PlanCanvas(p: Props) {
         ctx.strokeStyle = '#fff';
         ctx.stroke();
       }
+    }
+
+    // drive / crosscut names (one tag per named segment, at its middle)
+    if (p.showNetwork) {
+      ctx.font = `${11.5 * lw}px Arial`;
+      ctx.textBaseline = 'middle';
+      const drawn: Vec2[] = [];
+      for (const e of p.network.edges) {
+        if (!e.name) continue;
+        const L = polylineLength(e.points);
+        if (L * scale < 30) continue;
+        const m = pointAt(e.points, L / 2);
+        // avoid stacking identical-looking tags on top of each other
+        if (drawn.some((q) => Math.hypot(q[0] - m[0], q[1] - m[1]) * scale < 60)) continue;
+        drawn.push(m);
+        const tw = ctx.measureText(e.name).width;
+        const h = 17 * lw, padX = 6 * lw;
+        ctx.fillStyle = 'rgba(16,16,16,0.82)';
+        ctx.beginPath();
+        ctx.roundRect?.(m[0] - tw / 2 - padX, m[1] - h / 2, tw + padX * 2, h, 6 * lw);
+        if (!ctx.roundRect) ctx.rect(m[0] - tw / 2 - padX, m[1] - h / 2, tw + padX * 2, h);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(e.name, m[0] - tw / 2, m[1] + 0.5 * lw);
+      }
+      ctx.textBaseline = 'alphabetic';
     }
 
     p.calibration.forEach((cp, i) => {

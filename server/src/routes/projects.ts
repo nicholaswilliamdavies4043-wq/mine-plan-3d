@@ -22,10 +22,21 @@ const projectPatch = z.object({
   description: z.string().max(5000).optional(),
   kitId: z.string().nullable().optional(),
   profile: profileSchema.optional(),
+  items: z.array(z.object({
+    id: z.string(),
+    assetId: z.string(),
+    label: z.string().max(120).optional(),
+    position: z.tuple([z.number(), z.number(), z.number()]),
+    rotationDeg: z.number(),
+    scale: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
+  })).max(5000).optional(),
 });
 const networkSchema = z.object({
   nodes: z.array(z.object({ id: z.string(), x: z.number(), y: z.number() })),
-  edges: z.array(z.object({ id: z.string(), a: z.string(), b: z.string(), points: z.array(vec2).min(2), widthPx: z.number().optional() })),
+  edges: z.array(z.object({
+    id: z.string(), a: z.string(), b: z.string(), points: z.array(vec2).min(2), widthPx: z.number().optional(),
+    name: z.string().max(120).optional(), kind: z.enum(['drive', 'crosscut', 'access', 'ramp', 'oreDrive', 'stockpile', 'other']).optional(),
+  })),
   stopes: z.array(z.object({
     id: z.string(), polygon, heightM: z.number(), baseOffsetM: z.number(), label: z.string().optional(),
   })),
@@ -96,8 +107,10 @@ export function projectRoutes(store: Store, storage: ObjectStorage): Router {
         edges: first.network.edges.map((e) => e.points.map((q) => [Math.round(q[0]), Math.round(q[1])])),
         stopes: first.network.stopes.map((s) => s.polygon.map((q) => [Math.round(q[0]), Math.round(q[1])])),
       } : null;
+      const itemCount: Record<string, number> = {};
+      for (const it of p.items ?? []) itemCount[it.assetId] = (itemCount[it.assetId] ?? 0) + 1;
       return {
-        ...p, planCount: mine.length, lengthM: Math.round(lengthM), stopes, junctions,
+        ...p, planCount: mine.length, lengthM: Math.round(lengthM), stopes, junctions, itemCount,
         levels: mine.map((x) => x.levelRL), preview,
       };
     }));

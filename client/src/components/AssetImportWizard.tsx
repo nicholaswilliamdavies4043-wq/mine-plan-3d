@@ -16,6 +16,8 @@ interface Props {
   existing?: Asset;
   onClose: () => void;
   onSaved: (a: Asset) => void;
+  /** Pre-select a category, e.g. 'item' when adding from the Inventory page. */
+  presetCategory?: AssetCategory;
 }
 
 const SIDES: Side[] = ['+X', '-X', '+Z', '-Z'];
@@ -53,15 +55,15 @@ function Preview({ object, meta, box, onReady }: { object: THREE.Object3D | null
   );
 }
 
-export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
+export function AssetImportWizard({ existing, onClose, onSaved, presetCategory }: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [object, setObject] = useState<THREE.Object3D | null>(null);
   const [report, setReport] = useState<GltfValidationReport | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(existing?.name ?? '');
-  const [category, setCategory] = useState<AssetCategory>(existing?.category ?? 'straight');
-  const [meta, setMeta] = useState<AssetMeta>(existing?.meta ?? defaultMeta());
+  const [category, setCategory] = useState<AssetCategory>(existing?.category ?? presetCategory ?? 'straight');
+  const [meta, setMeta] = useState<AssetMeta>(existing?.meta ?? { ...defaultMeta(), fitToDriveWidth: presetCategory !== 'item', connectionType: presetCategory === 'item' ? 'item' : 'drive' });
   const [pivotOffset, setPivotOffset] = useState<Vec3>([0, 0, 0]);
   const [sourceUrl, setSourceUrl] = useState(existing?.sourceUrl ?? '');
   const [license, setLicense] = useState(existing?.license ?? '');
@@ -200,7 +202,7 @@ export function AssetImportWizard({ existing, onClose, onSaved }: Props) {
     <div className="modal-back">
       <div className="modal">
         <header>
-          <h2 style={{ margin: 0 }}>{existing ? `Edit ${existing.name}` : 'Import tunnel asset'}</h2>
+          <h2 style={{ margin: 0 }}>{existing ? `Edit ${existing.name}` : presetCategory === 'item' ? 'Add inventory item' : 'Import tunnel asset'}</h2>
           <span className="spacer" />
           <button onClick={onClose}>Close</button>
         </header>

@@ -8,8 +8,8 @@
  * A direction (dx, dz) has heading angle ang = atan2(-dz, dx); a rotation about Y by
  * `ang` maps the asset's +X (forward) axis onto that direction.
  */
-import type { AssetConnector, AssetMeta, KitSlot, PlanNetwork, Side, Stope, TunnelProfile, Vec2, Vec3 } from './types';
-import { dist, polylineLength, slicePolyline } from './geometry';
+import type { AssetConnector, AssetMeta, DriveKind, KitSlot, PlanNetwork, Side, Stope, TunnelProfile, Vec2, Vec3 } from './types';
+import { dist, pointAt, polylineLength, slicePolyline } from './geometry';
 import { fitSimilarity, pxToWorld, scaleOf, type Similarity } from './georef';
 import type { GeoRef } from './types';
 
@@ -75,6 +75,19 @@ export interface CollisionSegment {
   b: [number, number];
   r: number;
   y: number;
+  /** drive name / kind, used to tell the user where they are */
+  name?: string;
+  kind?: DriveKind;
+  planId?: string;
+}
+
+/** Name sign placed along a named drive. */
+export interface DriveLabel {
+  text: string;
+  kind?: DriveKind;
+  position: Vec3;
+  /** drive direction (xz) at the sign */
+  dir: [number, number];
 }
 
 export interface Assembly {
@@ -83,6 +96,7 @@ export interface Assembly {
   hubs: Hub[];
   stopes: StopeVolume[];
   collision: CollisionSegment[];
+  labels: DriveLabel[];
   spawn: { position: Vec3; dir: [number, number] } | null;
   bounds: { min: Vec3; max: Vec3 };
   stats: {
@@ -169,6 +183,9 @@ interface WEdge {
   pts: XZ[];
   width: number;
   y: number;
+  name?: string;
+  kind?: DriveKind;
+  planId: string;
 }
 
 interface EndInfo {
@@ -204,7 +221,7 @@ function buildEdges(levels: LevelInput[], profile: TunnelProfile, origin: { E: n
       const pb = nodePos.get(nid(e.b));
       if (pa) pts[0] = pa;
       if (pb) pts[pts.length - 1] = pb;
-      edges.push({ id: `${lv.planId}:${e.id}`, a: nid(e.a), b: nid(e.b), pts, width, y });
+      edges.push({ id: `${lv.planId}:${e.id}`, a: nid(e.a), b: nid(e.b), pts, width, y, name: e.name?.trim() || undefined, kind: e.kind, planId: lv.planId });
     }
     for (const s of lv.network.stopes as Stope[]) {
       if (s.polygon.length < 3) continue;
@@ -441,7 +458,23 @@ export function assemble(levels: LevelInput[], profile: TunnelProfile, kit: Reso
   // collision capsules along the untrimmed centrelines
   const collision: CollisionSegment[] = [];
   for (const e of edges) {
-    for (let i = 1; i < e.pts.length; i++) collision.push({ a: e.pts[i - 1], b: e.pts[i], r: e.width / 2, y: e.y });
+    for (let i = 1; i < e.pts.length; i++) collision.push({ a: e.pts[i - 1], b: e.pts[i], r: e.width / 2, y: e.y, name: e.name, kind: e.kind, planId: e.planId });
+  }
+
+  // name signs: along each named drive, at the middle of short drives and every ~50 m on long ones
+  const labels: DriveLabel[] = [];
+  const signY = profile.wallHeight * 0.85;
+  for (const e of rawEdges) {
+    if (!e.name) continue;
+    const L = polylineLength(e.pts as Vec2[]);
+    if (L < 2) continue;
+    const at = L < 70 ? [L / 2] : Array.from({ length: Math.floor((L - 10) / 50) + 1 }, (_, i) => 25 + i * 50).filter((s) => s < L - 5);
+    for (const s of at) {
+      const p = pointAt(e.pts as Vec2[], s);
+      const q = pointAt(e.pts as Vec2[], Math.min(L, s + 1));
+      const d = unit([q[0] - p[0], q[1] - p[1]]);
+      labels.push({ text: e.name, kind: e.kind, position: [p[0], e.y + signY, p[1]], dir: d });
+    }
   }
 
   // spawn at a dead end if possible, looking into the drive
@@ -467,7 +500,7 @@ export function assemble(levels: LevelInput[], profile: TunnelProfile, kit: Reso
   for (const s of built.stopes) for (const p of s.polygon) { grow(p[0], s.yBase, p[1]); grow(p[0], s.yBase + s.height, p[1]); }
   if (!isFinite(min[0])) { min.fill(0); max.fill(0); }
 
-  return { origin, pieces, hubs, stopes: built.stopes, collision, spawn, bounds: { min, max }, stats };
+  return { origin, pieces, hubs, stopes: built.stopes, collision, labels, spawn, bounds: { min, max }, stats };
 }
 
 /** Clamp a point (xz) to the union of drive capsules on the nearest level. Used for walk-mode collision. */
@@ -488,6 +521,19 @@ export function clampToDrives(p: XZ, y: number, segs: CollisionSegment[], margin
       bestPen = pen;
       best = [q[0] + ((p[0] - q[0]) / d) * r, q[1] + ((p[1] - q[1]) / d) * r];
     }
+  }
+  return best;
+}
+
+/** The drive segment nearest to a point (xz) on the nearest level, for "you are here" read-outs. */
+export function nearestDrive(p: XZ, y: number, segs: CollisionSegment[]): { seg: CollisionSegment; d: number } | null {
+  let best: { seg: CollisionSegment; d: number } | null = null;
+  for (const s of segs) {
+    const ab: XZ = [s.b[0] - s.a[0], s.b[1] - s.a[1]];
+    const l2 = ab[0] * ab[0] + ab[1] * ab[1];
+    const t = l2 > 0 ? Math.max(0, Math.min(1, ((p[0] - s.a[0]) * ab[0] + (p[1] - s.a[1]) * ab[1]) / l2)) : 0;
+    const d = Math.hypot(p[0] - (s.a[0] + ab[0] * t), p[1] - (s.a[1] + ab[1] * t)) + Math.abs(s.y - y) * 2;
+    if (!best || d < best.d) best = { seg: s, d };
   }
   return best;
 }

@@ -15,6 +15,16 @@ A web app that turns a 2D underground mine plan into a navigable 3D model. It bu
 - **Open project file** (projects page) loads a `.mine3d` file on any PC running the app. Assets already in the library are reused, and the project opens as a new copy.
 - **Export GLB** (3D viewer) saves the assembled model for Blender, Deswik, Unity or any glTF viewer.
 
+### Inventory and named drives
+
+- **Inventory** (left bar): add equipment and objects with their own 3D models, such as loaders, refuge chambers, pumps and signs.
+- Placing items: in a project's 3D model, open the **Inventory** tab.
+  - In Overview, click **Place** and then a point in a drive. The item lands on the drive floor.
+  - In Walk, **Place here** puts the item 4 m in front of you.
+- Select a placed item to move, rotate or scale it with the gizmo (G / R / S), or type exact values: easting, northing, RL, heading and scale. You can also label, duplicate or remove it. Items are saved with the project and included in `.mine3d` downloads.
+- **Drive and crosscut names**: in the plan editor, select a drive segment and give it a name and type (drive, crosscut, ore drive, ramp and so on). **Apply name to the whole straight run** names it through the junctions.
+  - Names show on the plan, as signs along the drives in 3D, and in the walk-through location bar (name, type and E/N/RL).
+
 ### Interface
 
 - Dark and light themes (switch in the top bar).

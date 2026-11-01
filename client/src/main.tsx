@@ -8,6 +8,7 @@ import { PlanEditorPage } from './pages/PlanEditorPage';
 import { AssetLibraryPage } from './pages/AssetLibraryPage';
 import { ViewerPage } from './pages/ViewerPage';
 import { HelpPage } from './pages/HelpPage';
+import { InventoryPage } from './pages/InventoryPage';
 import { Shell } from './ui/shell';
 import { ThemeProvider } from './ui/theme';
 import { ToastProvider } from './ui/toast';
@@ -24,6 +25,7 @@ function AnimatedRoutes() {
         <Route path="/projects/:projectId/view" element={<ViewerPage />} />
         <Route path="/assets" element={<AssetLibraryPage />} />
         <Route path="/help" element={<HelpPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
       </Routes>
     </div>
   );

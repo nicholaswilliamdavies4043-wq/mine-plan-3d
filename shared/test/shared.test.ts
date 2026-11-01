@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addPolyline, assemble, defaultProfile, emptyNetwork, fitSimilarity, matchConnectors, mergeDegree2, normalisationMatrix,
+  addPolyline, assemble, defaultProfile, emptyNetwork, fitSimilarity, matchConnectors, mergeDegree2, nearestDrive, normalisationMatrix, straightRun,
   pxToWorld, transformPoint, worldToPx, type AssetMeta, type GeoRef, type PlanNetwork,
 } from '../src';
 
@@ -85,6 +85,24 @@ describe('assembly', () => {
     });
     expect(a.hubs.length).toBe(0);
     expect(a.stats.assetJunctions).toBe(1);
+  });
+});
+
+describe('drive naming', () => {
+  it('follows the straight run through a junction and labels named drives', () => {
+    let net: PlanNetwork = emptyNetwork();
+    net = addPolyline(net, [[0, 0], [200, 0]], 3);
+    net = addPolyline(net, [[100, 0], [100, 150]], 3); // splits the main drive at x=100
+    const main = net.edges.find((e) => e.points.some((p) => p[0] === 0))!;
+    const run = straightRun(net, main.id);
+    expect(run.length).toBe(2); // both halves of the main drive, not the crosscut
+    net = { ...net, edges: net.edges.map((e) => (run.includes(e.id) ? { ...e, name: 'Main drive', kind: 'drive' as const } : { ...e, name: 'XC 1', kind: 'crosscut' as const })) };
+    const a = assemble([{ planId: 'p', levelRL: 0, georef: { metersPerPixel: 1, points: [] }, network: net }], defaultProfile());
+    expect(a.labels.some((l) => l.text === 'Main drive')).toBe(true);
+    expect(a.labels.some((l) => l.text === 'XC 1' && l.kind === 'crosscut')).toBe(true);
+    const seg = a.collision.find((c) => c.name === 'XC 1')!;
+    const mid: [number, number] = [(seg.a[0] + seg.b[0]) / 2, (seg.a[1] + seg.b[1]) / 2];
+    expect(nearestDrive(mid, 0, a.collision)?.seg.name).toBe('XC 1');
   });
 });
 

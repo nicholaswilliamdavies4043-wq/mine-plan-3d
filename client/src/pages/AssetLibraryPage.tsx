@@ -108,7 +108,7 @@ export function AssetLibraryPage() {
   const toast = useToast();
 
   const load = () => {
-    api.assets().then(setAssets).catch((e) => setError(e.message));
+    api.assets().then((a) => setAssets(a.filter((x) => x.category !== 'item'))).catch((e) => setError(e.message));
     api.kits().then(setKits).catch((e) => setError(e.message));
   };
   useEffect(load, []);

@@ -33,6 +33,7 @@ export type ProjectSummary = Project & {
   lengthM: number;
   stopes: number;
   junctions: number;
+  itemCount: Record<string, number>;
   levels: number[];
   preview: ProjectPreview | null;
 };

@@ -29,7 +29,8 @@ export function usePageChrome(crumbs: Crumb[], opts: { search?: boolean } = {}) 
 
 const NAV: { to: string; icon: IconName; label: string; end?: boolean }[] = [
   { to: '/', icon: 'grid', label: 'Projects', end: true },
-  { to: '/assets', icon: 'cube', label: 'Asset library' },
+  { to: '/inventory', icon: 'box', label: 'Inventory' },
+  { to: '/assets', icon: 'cube', label: 'Tunnel asset library' },
   { to: '/help', icon: 'help', label: 'Info & parameters' },
 ];
 
