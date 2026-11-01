@@ -34,6 +34,25 @@ const TOOL_HINTS: Record<Tool, string> = {
 
 type Tab = 'props' | 'info';
 
+interface TipState { label: string; k?: string; top: number; left: number }
+
+/** Tool rail button. Its tooltip is rendered fixed-position so the scrollable rail never clips it. */
+function RailButton({ icon, label, k, on, disabled, onClick, setTip }: {
+  icon: IconName; label: string; k?: string; on?: boolean; disabled?: boolean; onClick: () => void; setTip: (t: TipState | null) => void;
+}) {
+  const show = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setTip({ label, k, top: r.top + r.height / 2, left: r.right + 10 });
+  };
+  return (
+    <button className={`tool-btn${on ? ' on' : ''}`} onClick={onClick} disabled={disabled} aria-label={label} aria-pressed={on}
+      onMouseEnter={(e) => show(e.currentTarget)} onFocus={(e) => show(e.currentTarget)} onBlur={() => setTip(null)}>
+      <Icon name={icon} size={19} />
+      {k && k.length === 1 && <span className="k">{k}</span>}
+    </button>
+  );
+}
+
 /** Collapsible, Blender-style property section with a workflow step indicator. */
 function Section({ n, title, done, children, open }: { n: number; title: string; done?: boolean; open?: boolean; children: React.ReactNode }) {
   // open state is only suggested on first render; afterwards the user controls it
@@ -66,6 +85,25 @@ export function PlanEditorPage() {
   const [snap, setSnap] = useState(true);
   const [loupe, setLoupe] = useState(true);
   const [fitSignal, setFitSignal] = useState(0);
+  const [zoomCmd, setZoomCmd] = useState<{ seq: number; kind: 'in' | 'out' | 'actual' }>({ seq: 0, kind: 'in' });
+  const zoomBy = (kind: 'in' | 'out' | 'actual') => setZoomCmd((z) => ({ seq: z.seq + 1, kind }));
+  const [panelOpen, setPanelOpenState] = useState(() => { try { return localStorage.getItem('mineplan-panel') !== 'closed'; } catch { return true; } });
+  const setPanelOpen = (v: boolean) => {
+    setPanelOpenState(v);
+    try { localStorage.setItem('mineplan-panel', v ? 'open' : 'closed'); } catch { /* ignore */ }
+  };
+  const [fullscreen, setFullscreen] = useState(false);
+  const [tip, setTip] = useState<TipState | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else editorRef.current?.requestFullscreen?.().catch(() => toast('Full screen is not available here', 'error'));
+  };
+  useEffect(() => {
+    const on = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
   const [cursor, setCursor] = useState<Vec2 | null>(null);
   const [zoom, setZoom] = useState(1);
   const [detecting, setDetecting] = useState(false);
@@ -142,10 +180,17 @@ export function PlanEditorPage() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = TOOLS.find((x) => x.key.toLowerCase() === e.key.toLowerCase());
+      if (e.key === 'F' && e.shiftKey) { toggleFullscreen(); return; }
       if (t) { setTool(t.tool); return; }
-      if (e.key.toLowerCase() === 'f') setFitSignal((n) => n + 1);
-      if (e.key.toLowerCase() === 'm') setLoupe((v) => !v);
-      if (e.key.toLowerCase() === 'n') setSnap((v) => !v);
+      const k = e.key.toLowerCase();
+      if (k === 'f') setFitSignal((n) => n + 1);
+      else if (k === 'm') setLoupe((v) => !v);
+      else if (k === 'n') setSnap((v) => !v);
+      else if (k === 'e') setShowNetwork((v) => !v);
+      else if (k === 'p') setPanelOpen(!panelOpen);
+      else if (k === '+' || k === '=') zoomBy('in');
+      else if (k === '-' || k === '_') zoomBy('out');
+      else if (k === '0') zoomBy('actual');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -202,23 +247,36 @@ export function PlanEditorPage() {
   const cursorWorld = cursor ? pxToWorld(sim, cursor) : null;
 
   return (
-    <div className="editor">
+    <div className={`editor${panelOpen ? '' : ' collapsed'}`} ref={editorRef}>
       {/* ---------------- tool rail ---------------- */}
-      <div className="toolbar-v" role="toolbar" aria-label="Tools">
+      <div className="toolbar-v" role="toolbar" aria-label="Tools" onMouseLeave={() => setTip(null)}>
         {TOOLS.map((t, i) => (
           <span key={t.tool} style={{ display: 'contents' }}>
             {(i === 2 || i === 5) && <div className="divider" style={{ width: 28 }} />}
-            <button className={`tool-btn${tool === t.tool ? ' on' : ''}`} onClick={() => setTool(t.tool)} aria-label={t.label}>
-              <Icon name={t.icon} size={19} />
-              <span className="k">{t.key}</span>
-              <span className="tip">{t.label}<kbd>{t.key}</kbd></span>
-            </button>
+            <RailButton icon={t.icon} label={t.label} k={t.key} on={tool === t.tool} onClick={() => setTool(t.tool)} setTip={setTip} />
           </span>
         ))}
         <div className="divider" style={{ width: 28 }} />
-        <button className="tool-btn" onClick={undo} disabled={!history.current.length} aria-label="Undo"><Icon name="undo" size={18} /><span className="tip">Undo<kbd>Ctrl Z</kbd></span></button>
-        <button className="tool-btn" onClick={redo} disabled={!future.current.length} aria-label="Redo"><Icon name="redo" size={18} /><span className="tip">Redo<kbd>Ctrl Y</kbd></span></button>
+        <RailButton icon="zoomIn" label="Zoom in" k="+" onClick={() => zoomBy('in')} setTip={setTip} />
+        <RailButton icon="zoomOut" label="Zoom out" k="−" onClick={() => zoomBy('out')} setTip={setTip} />
+        <RailButton icon="fit" label="Fit plan to view" k="F" onClick={() => setFitSignal((n) => n + 1)} setTip={setTip} />
+        <div className="divider" style={{ width: 28 }} />
+        <RailButton icon="magnet" label={`Snapping ${snap ? 'on' : 'off'}`} k="N" on={snap} onClick={() => setSnap(!snap)} setTip={setTip} />
+        <RailButton icon="loupe" label={`Magnifier ${loupe ? 'on' : 'off'}`} k="M" on={loupe} onClick={() => setLoupe(!loupe)} setTip={setTip} />
+        <RailButton icon="eye" label={`Drives & stopes ${showNetwork ? 'shown' : 'hidden'}`} k="E" on={showNetwork} onClick={() => setShowNetwork(!showNetwork)} setTip={setTip} />
+        <RailButton icon="layers" label={mask ? `Detection mask ${showMask ? 'shown' : 'hidden'}` : 'Detection mask (run detection first)'} on={!!mask && showMask} disabled={!mask} onClick={() => setShowMask(!showMask)} setTip={setTip} />
+        <div className="divider" style={{ width: 28 }} />
+        <RailButton icon="undo" label="Undo" k="Ctrl Z" disabled={!history.current.length} onClick={undo} setTip={setTip} />
+        <RailButton icon="redo" label="Redo" k="Ctrl Y" disabled={!future.current.length} onClick={redo} setTip={setTip} />
+        <div className="divider" style={{ width: 28 }} />
+        <RailButton icon="panel" label={panelOpen ? 'Hide properties (bigger plan)' : 'Show properties'} k="P" on={panelOpen} onClick={() => setPanelOpen(!panelOpen)} setTip={setTip} />
+        <RailButton icon={fullscreen ? 'shrink' : 'expand'} label={fullscreen ? 'Exit full screen' : 'Full screen'} k="Shift F" onClick={toggleFullscreen} setTip={setTip} />
       </div>
+      {tip && (
+        <div className="tool-tip-fixed" style={{ top: tip.top, left: tip.left }}>
+          {tip.label}{tip.k && <kbd>{tip.k}</kbd>}
+        </div>
+      )}
 
       {/* ---------------- viewport ---------------- */}
       <div className="viewport">
@@ -240,6 +298,7 @@ export function PlanEditorPage() {
           mpp={mpp}
           rotation={rotationOf(sim)}
           fitSignal={fitSignal}
+          zoomCmd={zoomCmd}
           onSelect={setSelection}
           onHover={setCursor}
           onZoom={setZoom}
@@ -264,12 +323,16 @@ export function PlanEditorPage() {
         <div className="overlay-tl">
           <span className="chip"><Icon name={TOOLS.find((t) => t.tool === tool)!.icon} size={14} /> {TOOLS.find((t) => t.tool === tool)!.label}</span>
         </div>
-        <div className="overlay-tr">
-          <button className="chip btn" onClick={() => setFitSignal((n) => n + 1)} title="Fit (F)"><Icon name="fit" size={14} /> Fit</button>
-          <button className={`chip btn${snap ? ' on' : ''}`} onClick={() => setSnap(!snap)} title="Snapping (N)"><Icon name="magnet" size={14} /> Snap</button>
-          <button className={`chip btn${loupe ? ' on' : ''}`} onClick={() => setLoupe(!loupe)} title="Magnifier (M)"><Icon name="loupe" size={14} /> Loupe</button>
-          <button className={`chip btn${showNetwork ? ' on' : ''}`} onClick={() => setShowNetwork(!showNetwork)}><Icon name="eye" size={14} /> Drives</button>
-          <button className={`chip btn${showMask && mask ? ' on' : ''}`} disabled={!mask} onClick={() => setShowMask(!showMask)}><Icon name="layers" size={14} /> Mask</button>
+        {!panelOpen && (
+          <div className="overlay-tr">
+            <button className="chip btn" onClick={() => setPanelOpen(true)} title="Show properties (P)"><Icon name="panel" size={14} /> Properties</button>
+          </div>
+        )}
+        <div className="zoom-ctl" role="group" aria-label="Zoom">
+          <button onClick={() => zoomBy('out')} aria-label="Zoom out" title="Zoom out (−)"><Icon name="minus" size={16} /></button>
+          <span className="pct" role="button" tabIndex={0} title="Actual size (0)" onClick={() => zoomBy('actual')}>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => zoomBy('in')} aria-label="Zoom in" title="Zoom in (+)"><Icon name="plus" size={16} /></button>
+          <button onClick={() => setFitSignal((n) => n + 1)} aria-label="Fit to view" title="Fit (F)"><Icon name="fit" size={16} /></button>
         </div>
         {detecting && (
           <div className="hint" style={{ bottom: 'auto', top: 60 }}><span className="spinner" /> Detecting drives…</div>
@@ -281,6 +344,7 @@ export function PlanEditorPage() {
         <div className="tabs">
           <button className={tab === 'props' ? 'on' : ''} onClick={() => setTab('props')}><Icon name="settings" size={15} /> Properties</button>
           <button className={tab === 'info' ? 'on' : ''} onClick={() => setTab('info')}><Icon name="info" size={15} /> Info</button>
+          <button className="ghost" style={{ flex: 'none', padding: '9px 10px' }} onClick={() => setPanelOpen(false)} aria-label="Hide properties" title="Hide properties for a bigger plan (P)"><Icon name="x" size={15} /></button>
         </div>
         <div className="scroll">
           {tab === 'info' ? (

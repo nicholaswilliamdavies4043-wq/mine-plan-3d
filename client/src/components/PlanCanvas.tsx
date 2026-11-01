@@ -34,6 +34,8 @@ interface Props {
   /** rotation of image +x from grid east (radians), for bearings */
   rotation: number;
   fitSignal: number;
+  /** zoom command from toolbar buttons; `seq` changes on every click */
+  zoomCmd?: { seq: number; kind: 'in' | 'out' | 'actual' };
   onSelect: (s: Selection) => void;
   onPolygon: (tool: 'region' | 'exclude' | 'stope', poly: Polygon) => void;
   onPolyline: (pts: Vec2[]) => void;
@@ -106,6 +108,17 @@ export function PlanCanvas(p: Props) {
   }, [p.imageWidth, p.imageHeight]);
 
   useEffect(() => { if (view.current.fitted) animateTo(fitTarget()); }, [p.fitSignal]);
+
+  // zoom buttons: zoom around the centre of the viewport
+  useEffect(() => {
+    const cmd = p.zoomCmd;
+    const c = canvasRef.current;
+    if (!cmd || !cmd.seq || !c) return;
+    const v = view.current;
+    const ns = cmd.kind === 'actual' ? 1 : Math.min(60, Math.max(0.03, v.scale * (cmd.kind === 'in' ? 1.5 : 1 / 1.5)));
+    const cx = c.clientWidth / 2, cy = c.clientHeight / 2;
+    animateTo({ scale: ns, ox: cx - ((cx - v.ox) * ns) / v.scale, oy: cy - ((cy - v.oy) * ns) / v.scale }, 220);
+  }, [p.zoomCmd?.seq]);
 
   useEffect(() => {
     const ro = new ResizeObserver(() => {

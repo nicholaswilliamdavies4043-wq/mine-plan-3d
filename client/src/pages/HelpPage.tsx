@@ -4,7 +4,8 @@ import { Icon } from '../ui/Icon';
 
 const SHORTCUTS: [string, string][] = [
   ['V', 'Select'], ['H', 'Pan'], ['R', 'Draw region'], ['X', 'Draw exclusion'], ['D', 'Draw drive'], ['S', 'Draw stope'], ['C', 'Pick grid point'],
-  ['F', 'Fit plan to view'], ['M', 'Toggle magnifier'], ['N', 'Toggle snapping'], ['Shift (drawing)', 'Lock angle to 15° steps'], ['Ctrl + click', 'Place a point without snapping'],
+  ['+ / −', 'Zoom in / out'], ['0', 'Actual size (100%)'], ['F', 'Fit plan to view'], ['P', 'Hide / show properties panel'], ['Shift F', 'Full screen editor'],
+  ['M', 'Toggle magnifier'], ['N', 'Toggle snapping'], ['E', 'Show / hide drives and stopes'], ['Shift (drawing)', 'Lock angle to 15° steps'], ['Ctrl + click', 'Place a point without snapping'],
   ['Enter / double-click', 'Finish shape'], ['Backspace', 'Remove last point'], ['Esc', 'Cancel drawing'], ['Delete', 'Delete selection'],
   ['Arrow keys', 'Nudge selected junction 0.5 px (Shift: 5 px)'], ['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl K', 'Search'],
 ];
