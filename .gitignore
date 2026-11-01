@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+coverage/
+# Mine plans are client/site data - keep them out of git
+samples/
+debug/
