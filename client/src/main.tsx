@@ -10,6 +10,7 @@ import { ViewerPage } from './pages/ViewerPage';
 import { HelpPage } from './pages/HelpPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { SystemPage } from './pages/SystemPage';
+import { AboutPage } from './pages/AboutPage';
 import { Shell } from './ui/shell';
 import { ThemeProvider } from './ui/theme';
 import { ToastProvider } from './ui/toast';
@@ -28,6 +29,7 @@ function AnimatedRoutes() {
         <Route path="/help" element={<HelpPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/system" element={<SystemPage />} />
+        <Route path="/about" element={<AboutPage />} />
       </Routes>
     </div>
   );

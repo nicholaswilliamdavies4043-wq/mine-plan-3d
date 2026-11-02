@@ -4,6 +4,7 @@ import { Icon, type IconName } from './Icon';
 import { ThemeSwitch } from './theme';
 import { useToast } from './toast';
 import { PortalIcon } from './Logo';
+import { APP } from '../about';
 import { useSyncState } from '../offline/useSync';
 import { api } from '../api';
 
@@ -108,6 +109,10 @@ export function Shell({ children }: { children: ReactNode }) {
             </NavLink>
           ))}
           <span className="grow" />
+          <NavLink to="/about" className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} aria-label="About">
+            <Icon name="info" size={20} />
+            <span className="tip">About {APP.name}</span>
+          </NavLink>
         </nav>
         <div className="main-col">
           <header className="topbar">

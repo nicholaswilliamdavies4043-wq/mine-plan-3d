@@ -2,6 +2,7 @@
   "name": "@mineplan/client",
   "version": "0.1.0",
   "private": true,
+  "author": "Nicholas William Davies",
   "type": "module",
   "scripts": {
     "dev": "vite",
