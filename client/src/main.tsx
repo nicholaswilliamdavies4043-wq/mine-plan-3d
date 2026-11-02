@@ -9,6 +9,7 @@ import { AssetLibraryPage } from './pages/AssetLibraryPage';
 import { ViewerPage } from './pages/ViewerPage';
 import { HelpPage } from './pages/HelpPage';
 import { InventoryPage } from './pages/InventoryPage';
+import { SystemPage } from './pages/SystemPage';
 import { Shell } from './ui/shell';
 import { ThemeProvider } from './ui/theme';
 import { ToastProvider } from './ui/toast';
@@ -26,9 +27,16 @@ function AnimatedRoutes() {
         <Route path="/assets" element={<AssetLibraryPage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/system" element={<SystemPage />} />
       </Routes>
     </div>
   );
+}
+
+// Offline support: the service worker caches the app and the plan/model files (production builds only,
+// so it never interferes with the Vite dev server).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

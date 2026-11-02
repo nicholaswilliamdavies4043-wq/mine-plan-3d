@@ -17,6 +17,18 @@ const profileSchema = z.object({
   archRise: z.number().min(0).max(30),
   useDetectedWidths: z.boolean(),
 });
+const color = z.string().max(32);
+const measureKind = z.enum(['line', 'polyline']);
+const planMeasurements = z.array(z.object({
+  id: z.string().max(64), label: z.string().max(120), kind: measureKind, points: z.array(vec2).min(2).max(2000), color, showIn3D: z.boolean(),
+})).max(2000);
+const modelMeasurements = z.array(z.object({
+  id: z.string().max(64), label: z.string().max(120), kind: measureKind,
+  points: z.array(z.tuple([z.number(), z.number(), z.number()])).min(2).max(2000), color, showIn3D: z.boolean(),
+})).max(2000);
+/** Ids made on a device while offline: a letter prefix and base-36 characters. */
+const clientId = (prefix: string) => z.string().regex(new RegExp(`^${prefix}[a-z0-9]{8,40}$`));
+
 const projectPatch = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
@@ -30,6 +42,7 @@ const projectPatch = z.object({
     rotationDeg: z.number(),
     scale: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
   })).max(5000).optional(),
+  measurements: modelMeasurements.optional(),
 });
 const networkSchema = z.object({
   nodes: z.array(z.object({ id: z.string(), x: z.number(), y: z.number() })),
@@ -47,11 +60,13 @@ const planPatch = z.object({
   georef: z.object({
     metersPerPixel: z.number().positive(),
     points: z.array(z.object({ px: vec2, world: vec2 })).max(10),
+    scaleLine: z.object({ a: vec2, b: vec2, distanceM: z.number().positive() }).nullable().optional(),
   }).optional(),
   regions: z.array(polygon).optional(),
   excludes: z.array(polygon).optional(),
   params: z.record(z.any()).optional(),
   network: networkSchema.optional(),
+  measurements: planMeasurements.optional(),
 });
 
 /** Small LRU of decoded plan images (decoding large JPEGs is the slowest part of detection). */
@@ -117,8 +132,19 @@ export function projectRoutes(store: Store, storage: ObjectStorage): Router {
   }));
 
   r.post('/projects', ah(async (req, res) => {
-    const body = z.object({ name: z.string().min(1).max(200), description: z.string().max(5000).optional() }).parse(req.body);
-    const p: Project = { id: uid('p'), name: body.name, description: body.description, kitId: null, profile: defaultProfile(), createdAt: now(), updatedAt: now() };
+    const body = z.object({
+      name: z.string().min(1).max(200), description: z.string().max(5000).optional(),
+      id: clientId('p').optional(), createdAt: z.string().datetime().optional(),
+    }).parse(req.body);
+    if (body.id) {
+      // replay of a project created offline: answer with the existing record
+      const existing = await store.projects.get(body.id);
+      if (existing) return res.status(200).json(existing);
+    }
+    const p: Project = {
+      id: body.id ?? uid('p'), name: body.name, description: body.description, kitId: null, profile: defaultProfile(),
+      createdAt: body.createdAt ?? now(), updatedAt: now(),
+    };
     res.status(201).json(await store.projects.create(p));
   }));
 
@@ -150,6 +176,12 @@ export function projectRoutes(store: Store, storage: ObjectStorage): Router {
   r.post('/projects/:id/plans', upload.single('image'), ah(async (req, res) => {
     const project = await store.projects.get(req.params.id);
     if (!project) throw new HttpError(404, 'Project not found');
+    const wanted = req.body.id ? clientId('pl').safeParse(req.body.id) : null;
+    if (wanted && !wanted.success) throw new HttpError(400, 'Invalid plan id');
+    if (wanted?.success) {
+      const existing = await store.plans.get(wanted.data);
+      if (existing) return res.status(200).json(existing);
+    }
     const file = req.file;
     if (!file) throw new HttpError(400, 'Attach the plan image as "image"');
     const mime = sniffMime(file.buffer);
@@ -160,7 +192,7 @@ export function projectRoutes(store: Store, storage: ObjectStorage): Router {
     } catch (e: any) {
       throw new HttpError(400, `Could not read image: ${e.message}`);
     }
-    const id = uid('pl');
+    const id = wanted?.success ? wanted.data : uid('pl');
     const name = (req.body.name as string) || fixName(file.originalname).replace(/\.[^.]+$/, '');
     const key = `plans/${id}/plan${mime === 'image/png' ? '.png' : '.jpg'}`;
     await storage.put(key, file.buffer, mime);

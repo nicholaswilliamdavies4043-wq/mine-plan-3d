@@ -73,6 +73,11 @@ export interface GeoRef {
   points: GeoRefPoint[];
   /** Fallback scale when fewer than 2 control points are defined. */
   metersPerPixel: number;
+  /**
+   * Known-distance calibration line (e.g. a scale bar or a dimensioned drive). When set, it gives
+   * metersPerPixel = distanceM / pixel length. Two or more grid control points take precedence.
+   */
+  scaleLine?: { a: Vec2; b: Vec2; distanceM: number } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,8 +191,37 @@ export interface Project {
   profile: TunnelProfile;
   /** Inventory items placed in the model. */
   items?: PlacedItem[];
+  /** Distances measured in the 3D model. */
+  measurements?: ModelMeasurement[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Measurements (distance calculator)
+// ---------------------------------------------------------------------------
+
+export type MeasureKind = 'line' | 'polyline';
+
+/** A distance measured on a plan sheet. Points are image pixels; lengths come from the plan scale. */
+export interface PlanMeasurement {
+  id: string;
+  label: string;
+  kind: MeasureKind;
+  points: Vec2[];
+  color: string;
+  /** Show this measurement on the drive walls in the 3D model. */
+  showIn3D: boolean;
+}
+
+/** A distance measured in the 3D model. Points are world [Easting, Northing, RL] in metres. */
+export interface ModelMeasurement {
+  id: string;
+  label: string;
+  kind: MeasureKind;
+  points: Vec3[];
+  color: string;
+  showIn3D: boolean;
 }
 
 export interface Plan {
@@ -207,6 +241,8 @@ export interface Plan {
   excludes: Polygon[];
   params: DetectionParams;
   network: PlanNetwork;
+  /** Distances measured on this sheet. */
+  measurements?: PlanMeasurement[];
   lastDetection?: Omit<DetectionResult, 'network' | 'maskPng'> | null;
   createdAt: string;
   updatedAt: string;
@@ -339,4 +375,49 @@ export interface GltfValidationReport {
   materials: number;
   textures: number;
   triangles?: number;
+}
+
+// ---------------------------------------------------------------------------
+// System status (data source page)
+// ---------------------------------------------------------------------------
+
+export interface DataSourceStatus {
+  /** 'postgres' | 'prisma' | 'file' */
+  kind: string;
+  /** Human-readable name, e.g. "PostgreSQL". */
+  label: string;
+  connected: boolean;
+  /** Short state line, e.g. "Working normally" or the connection error. */
+  message: string;
+  database?: string;
+  host?: string;
+  /** Environment variable or file that defines the data source. */
+  configuredBy: string;
+  /** Where the server keeps the data (file path, or "PostgreSQL"). */
+  location: string;
+  latencyMs?: number;
+  lastSavedAt?: string | null;
+  serverVersion?: string;
+  counts?: Record<string, number>;
+}
+
+export interface FileStorageStatus {
+  kind: string;
+  label: string;
+  location: string;
+  /** Files survive a redeploy of the server (false for local disk on most hosts). */
+  persistent: boolean;
+  objects?: number;
+  bytes?: number;
+}
+
+export interface SystemStatus {
+  ok: boolean;
+  version: string;
+  startedAt: string;
+  serverTime: string;
+  host: string;
+  dataSource: DataSourceStatus;
+  storage: FileStorageStatus;
+  warnings: string[];
 }

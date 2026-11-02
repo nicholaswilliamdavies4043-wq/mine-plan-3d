@@ -469,3 +469,78 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; }
   .editor { grid-template-columns: 58px minmax(0, 1fr) 320px; }
   .search { width: 180px; }
 }
+
+/* ---------------------------------------------------------------- upload card */
+/* Inputs and buttons inside grid/flex cells must be allowed to shrink, or they push past the card edge. */
+label.field { min-width: 0; }
+label.field input, label.field select { min-width: 0; max-width: 100%; }
+.upload-card { display: flex; flex-direction: column; gap: 12px; min-width: 0; border-style: dashed; overflow: hidden; }
+.upload-card.drag { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 96px;
+  padding: 14px 12px; border: 1px dashed var(--border-strong); border-radius: 14px; background: var(--surface-2);
+  color: var(--text-2); white-space: normal; text-align: center; line-height: 1.35;
+}
+.dropzone:hover { border-color: var(--accent); background: var(--surface-3); color: var(--text); }
+.upload-card.drag .dropzone { border-color: var(--accent); }
+.dropzone .dz-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); }
+.field-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(92px, 34%); gap: 10px; }
+.field-grid input { width: 100%; }
+button.block, .btn.block { width: 100%; justify-content: center; }
+
+/* ---------------------------------------------------------------- connection badge */
+.conn-badge {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: 17px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); text-decoration: none; white-space: nowrap;
+  max-width: 300px; min-width: 0;
+}
+.conn-badge .txt { overflow: hidden; text-overflow: ellipsis; }
+.conn-badge:hover { border-color: var(--border-strong); color: var(--text); }
+.conn-badge .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ok, #2fb36b); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #2fb36b) 25%, transparent); }
+.conn-badge.off .dot { background: #e0a400; box-shadow: 0 0 0 3px rgba(224, 164, 0, 0.25); }
+.conn-badge.err .dot { background: var(--error); box-shadow: 0 0 0 3px var(--error-soft); }
+.conn-badge.busy .dot { background: var(--select); box-shadow: 0 0 0 3px rgba(50, 125, 255, 0.25); }
+.conn-badge.off { color: var(--text); }
+.spin { animation: spin 1s linear infinite; }
+@media (max-width: 720px) { .conn-badge .txt { display: none; } }
+
+/* ---------------------------------------------------------------- data source page */
+.system-page { display: flex; flex-direction: column; gap: 16px; }
+.status-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; max-width: 1100px; }
+.status-card {
+  position: relative; background: var(--surface-glass); backdrop-filter: blur(16px); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px 18px; min-width: 0; overflow: hidden;
+}
+.status-card .k { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.status-card .v { font-size: 22px; font-weight: 700; margin: 8px 0 4px; color: var(--text); }
+.status-card .d { font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; }
+.status-card[class*='accent-']::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+.status-card.accent-ok::before { background: #2fb36b; }
+.status-card.accent-err::before { background: var(--error); }
+.status-card.accent-off::before { background: #e0a400; }
+.status-card.accent-busy::before { background: var(--select); }
+.status-note {
+  max-width: 1100px; padding: 14px 18px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-glass);
+  font-size: 13px; line-height: 1.7; color: var(--text-2);
+}
+.status-note code, .system-page code { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: var(--surface-3); border: 1px solid var(--border-strong); overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- measurements */
+.m-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; border-radius: 10px; border: 1px solid var(--border);
+  font-size: 13px; cursor: pointer; min-width: 0;
+}
+.m-item:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.m-item.on { border-color: var(--select); background: color-mix(in srgb, var(--select) 10%, transparent); }
+.m-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.m-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.m-val { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+button.icon-only { padding: 4px 6px; }
+button.icon-only.dim { opacity: 0.4; }
+button.swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid var(--surface); }
+.scale-line-box { padding: 10px; border-radius: 12px; border: 1px dashed var(--border-strong); }
+.measure-hud {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; border-radius: 14px; background: var(--surface-glass); border: 1px solid #22c55e; backdrop-filter: blur(12px);
+  font-size: 13px; white-space: nowrap; max-width: calc(100% - 32px);
+}

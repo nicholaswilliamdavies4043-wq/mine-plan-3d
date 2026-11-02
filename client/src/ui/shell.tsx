@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { Link, NavLink } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { ThemeSwitch } from './theme';
+import { useToast } from './toast';
+import { useSyncState } from '../offline/useSync';
+import { api } from '../api';
 
 export interface Crumb { label: string; to?: string }
 
@@ -32,7 +35,47 @@ const NAV: { to: string; icon: IconName; label: string; end?: boolean }[] = [
   { to: '/inventory', icon: 'box', label: 'Inventory' },
   { to: '/assets', icon: 'cube', label: 'Tunnel asset library' },
   { to: '/help', icon: 'help', label: 'Info & parameters' },
+  { to: '/system', icon: 'database', label: 'Data source & connection' },
 ];
+
+/**
+ * Connection read-out in the top bar: database name and state while online, the number of changes
+ * kept on this device while offline, and a spinner while they are sent.
+ */
+function ConnectionBadge() {
+  const s = useSyncState();
+  const toast = useToast();
+  const [db, setDb] = useState<{ label: string; connected: boolean } | null>(null);
+  useEffect(() => {
+    if (!s.online) return;
+    let alive = true;
+    const load = () => api.systemStatus().then((r) => alive && setDb({ label: r.dataSource.label, connected: r.dataSource.connected })).catch(() => {});
+    load();
+    const t = window.setInterval(load, 60000);
+    return () => { alive = false; window.clearInterval(t); };
+  }, [s.online]);
+  useEffect(() => {
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<{ count: number; notes: string[] }>).detail;
+      if (d.count) toast(`Back online: ${d.count} offline change${d.count === 1 ? '' : 's'} saved to the server`);
+      for (const n of d.notes ?? []) toast(n, 'info');
+    };
+    window.addEventListener('mineplan:synced', h);
+    return () => window.removeEventListener('mineplan:synced', h);
+  }, []);
+  let cls = 'ok', icon: IconName = 'database', text = db?.label ?? 'Online';
+  if (s.syncing) { cls = 'busy'; icon = 'refresh'; text = `Syncing ${s.pending}…`; }
+  else if (!s.online) { cls = 'off'; icon = 'cloudOff'; text = s.pending ? `Offline · ${s.pending} change${s.pending === 1 ? '' : 's'} on this device` : 'Offline'; }
+  else if (db && !db.connected) { cls = 'err'; icon = 'database'; text = 'Database not reachable'; }
+  else if (s.pending) { cls = 'busy'; icon = 'refresh'; text = `${s.pending} waiting to sync`; }
+  return (
+    <Link to="/system" className={`conn-badge ${cls}`} title="Data source and connection">
+      <span className="dot" />
+      <Icon name={icon} size={15} className={cls === 'busy' ? 'spin' : undefined} />
+      <span className="txt">{text}</span>
+    </Link>
+  );
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
@@ -83,6 +126,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 <kbd>Ctrl K</kbd>
               </label>
             )}
+            <ConnectionBadge />
             <ThemeSwitch />
           </header>
           <main className="content">{children}</main>

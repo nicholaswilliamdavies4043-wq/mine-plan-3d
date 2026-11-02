@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  findSnap, nearestOnPolyline, pointAt, pointInPolygon, polylineLength, type GeoRefPoint, type PlanNetwork, type Polygon, type Vec2,
+  findSnap, formatLength, nearestOnPolyline, pointAt, pointInPolygon, polylineLength,
+  type GeoRef, type GeoRefPoint, type LengthUnit, type MeasureKind, type PlanMeasurement, type PlanNetwork, type Polygon, type Vec2,
 } from '@mineplan/shared';
 import { cssVar, useTheme } from '../ui/theme';
 
-export type Tool = 'select' | 'pan' | 'region' | 'exclude' | 'drive' | 'stope' | 'calibrate';
+export type Tool = 'select' | 'pan' | 'region' | 'exclude' | 'drive' | 'stope' | 'calibrate' | 'scaleLine' | 'measure';
 
 export type Selection =
   | { kind: 'node'; id: string }
@@ -12,6 +13,7 @@ export type Selection =
   | { kind: 'stope'; id: string }
   | { kind: 'region'; index: number }
   | { kind: 'exclude'; index: number }
+  | { kind: 'measure'; id: string }
   | null;
 
 interface Props {
@@ -22,6 +24,12 @@ interface Props {
   regions: Polygon[];
   excludes: Polygon[];
   calibration: GeoRefPoint[];
+  /** Distances measured on the sheet. */
+  measurements: PlanMeasurement[];
+  measureMode: MeasureKind;
+  /** Known-distance calibration line. */
+  scaleLine?: GeoRef['scaleLine'];
+  unit: LengthUnit;
   maskUrl?: string | null;
   showMask: boolean;
   showNetwork: boolean;
@@ -41,12 +49,17 @@ interface Props {
   onPolyline: (pts: Vec2[]) => void;
   onMoveNode: (id: string, p: Vec2) => void;
   onCalibrate: (p: Vec2) => void;
+  onMeasure: (pts: Vec2[]) => void;
+  onScaleLine: (a: Vec2, b: Vec2) => void;
   onDelete: () => void;
   onHover?: (p: Vec2 | null) => void;
   onZoom?: (scale: number) => void;
 }
 
-const DRAW_TOOLS: Tool[] = ['region', 'exclude', 'drive', 'stope', 'calibrate'];
+const DRAW_TOOLS: Tool[] = ['region', 'exclude', 'drive', 'stope', 'calibrate', 'scaleLine', 'measure'];
+const AREA_TOOLS: Tool[] = ['region', 'exclude', 'stope'];
+/** Tools whose draft is a line of two points that finishes on the second click. */
+const twoPointTool = (t: Tool, mode: MeasureKind) => t === 'scaleLine' || (t === 'measure' && mode === 'line');
 const LOUPE = 168; // css px
 const LOUPE_MAG = 4;
 
@@ -156,7 +169,16 @@ export function PlanCanvas(p: Props) {
   };
 
   const snapPoint = (q: Vec2, ctrl: boolean): { point: Vec2; snapped: boolean } => {
-    if (!p.snapEnabled || ctrl || p.tool !== 'drive') return { point: q, snapped: false };
+    if (!p.snapEnabled || ctrl || (p.tool !== 'drive' && p.tool !== 'measure' && p.tool !== 'scaleLine')) return { point: q, snapped: false };
+    // measurements also snap to the ends of other measurements
+    if (p.tool !== 'drive') {
+      let best: Vec2 | null = null, bd = pxTol(10);
+      for (const m of p.measurements) for (const v of m.points) {
+        const d = Math.hypot(v[0] - q[0], v[1] - q[1]);
+        if (d < bd) { bd = d; best = v; }
+      }
+      if (best) return { point: best, snapped: true };
+    }
     const s = findSnap(p.network, q, pxTol(12));
     return s.kind === 'none' ? { point: q, snapped: false } : { point: s.point, snapped: true };
   };
@@ -305,6 +327,66 @@ export function PlanCanvas(p: Props) {
       ctx.textBaseline = 'alphabetic';
     }
 
+    // measurements (always shown, like the plan calculator)
+    const tag = (at: Vec2, text: string, color: string, small = false) => {
+      ctx.font = `${small ? 'normal' : 'bold'} ${(small ? 10.5 : 12) * lw}px Arial`;
+      const tw = ctx.measureText(text).width;
+      const h = (small ? 16 : 20) * lw, padX = 5 * lw;
+      const x = at[0] - tw / 2 - padX, y = at[1] - h - 6 * lw;
+      ctx.fillStyle = theme === 'dark' ? 'rgba(20,18,16,0.92)' : 'rgba(255,255,255,0.94)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, y, tw + padX * 2, h, 4 * lw); else ctx.rect(x, y, tw + padX * 2, h);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1 * lw;
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + padX, y + h / 2 + 0.5 * lw);
+      ctx.textBaseline = 'alphabetic';
+    };
+    const dot = (q: Vec2, color: string, r = 4) => {
+      ctx.beginPath();
+      ctx.arc(q[0], q[1], r * lw, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5 * lw;
+      ctx.stroke();
+    };
+    for (const m of p.measurements) {
+      const sel = isSel(p.selection, 'measure', m.id) || isSel(hoverSel, 'measure', m.id);
+      path(m.points, false);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = (sel ? 7 : 5) * lw;
+      ctx.stroke();
+      path(m.points, false);
+      ctx.strokeStyle = m.color;
+      ctx.lineWidth = (sel ? 3.5 : 2.2) * lw;
+      ctx.stroke();
+      m.points.forEach((q) => dot(q, m.color));
+      const L = polylineLength(m.points);
+      if (m.points.length > 2) {
+        for (let i = 1; i < m.points.length; i++) {
+          const a = m.points[i - 1], b = m.points[i];
+          const segPx = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          if (segPx * scale < 90) continue;
+          tag([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 22 * lw], formatLength(segPx * p.mpp, p.unit), m.color, true);
+        }
+      }
+      tag(pointAt(m.points, L / 2), `${m.label} · ${formatLength(L * p.mpp, p.unit)}`, m.color);
+    }
+    if (p.scaleLine) {
+      const { a, b, distanceM } = p.scaleLine;
+      ctx.setLineDash([6 * lw, 4 * lw]);
+      ctx.strokeStyle = col.error;
+      ctx.lineWidth = 2 * lw;
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      ctx.setLineDash([]);
+      dot(a, col.error, 3.5); dot(b, col.error, 3.5);
+      tag([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], `Scale · ${formatLength(distanceM, p.unit)}`, col.error);
+    }
+
     p.calibration.forEach((cp, i) => {
       const s = 12 * lw;
       ctx.strokeStyle = col.select;
@@ -327,12 +409,13 @@ export function PlanCanvas(p: Props) {
     const target = cursorTarget();
     if (draft.length) {
       const pts = target && DRAW_TOOLS.includes(p.tool) ? [...draft, target.point] : draft;
-      path(pts, p.tool !== 'drive' && pts.length > 2);
-      if (p.tool !== 'drive' && pts.length > 2) {
+      const area = AREA_TOOLS.includes(p.tool);
+      path(pts, area && pts.length > 2);
+      if (area && pts.length > 2) {
         ctx.fillStyle = p.tool === 'exclude' ? 'rgba(235,13,13,0.08)' : p.tool === 'stope' ? 'rgba(160,140,100,0.2)' : 'rgba(50,125,255,0.08)';
         ctx.fill();
       }
-      ctx.strokeStyle = col.select;
+      ctx.strokeStyle = p.tool === 'measure' ? '#22c55e' : p.tool === 'scaleLine' ? col.error : col.select;
       ctx.lineWidth = 2 * lw;
       ctx.setLineDash([6 * lw, 4 * lw]);
       ctx.stroke();
@@ -405,6 +488,11 @@ export function PlanCanvas(p: Props) {
     const tol = pxTol(9);
     let best: Selection = null;
     let bestD = tol;
+    for (const m of p.measurements) {
+      const r = nearestOnPolyline(q, m.points);
+      if (r.d < bestD) { bestD = r.d; best = { kind: 'measure', id: m.id }; }
+    }
+    if (best) return best;
     if (p.showNetwork) {
       for (const n of p.network.nodes) {
         const d = Math.hypot(n.x - q[0], n.y - q[1]);
@@ -439,6 +527,10 @@ export function PlanCanvas(p: Props) {
       }
     } else if ((p.tool === 'region' || p.tool === 'exclude' || p.tool === 'stope') && pts.length >= 3) {
       p.onPolygon(p.tool, pts);
+    } else if (p.tool === 'measure' && pts.length >= 2) {
+      p.onMeasure(pts);
+    } else if (p.tool === 'scaleLine' && pts.length >= 2) {
+      p.onScaleLine(pts[0], pts[pts.length - 1]);
     }
     pts = [];
     setDraft([]);
@@ -471,13 +563,19 @@ export function PlanCanvas(p: Props) {
       p.onCalibrate([Math.round(placed[0] * 10) / 10, Math.round(placed[1] * 10) / 10]);
       return;
     }
-    if (draftRef.current.length >= 3 && p.tool !== 'drive') {
+    if (twoPointTool(p.tool, p.measureMode) && draftRef.current.length === 1) {
+      const end = snapPoint(placed, e.ctrlKey).point;
+      draftRef.current = [draftRef.current[0], end];
+      finishDraft();
+      return;
+    }
+    if (draftRef.current.length >= 3 && AREA_TOOLS.includes(p.tool)) {
       const first = draftRef.current[0];
       if (Math.hypot(first[0] - q[0], first[1] - q[1]) < pxTol(10)) { finishDraft(); return; }
     }
     // the first point of a drive snaps immediately (so you can see what it joins)
     const isFirst = draftRef.current.length === 0;
-    const pt = p.tool === 'drive' && isFirst ? snapPoint(placed, e.ctrlKey).point : placed;
+    const pt = (p.tool === 'drive' && isFirst) || p.tool === 'measure' || p.tool === 'scaleLine' ? snapPoint(placed, e.ctrlKey).point : placed;
     if (e.ctrlKey) freeIdx.current.add(draftRef.current.length);
     setDraft((d) => [...d, pt]);
   };
@@ -557,7 +655,7 @@ export function PlanCanvas(p: Props) {
   // live measurement tag
   let measure: string | null = null;
   const target = cursorTarget();
-  if (hover && target && draft.length && (p.tool === 'drive' || p.tool === 'region' || p.tool === 'exclude' || p.tool === 'stope')) {
+  if (hover && target && draft.length && p.tool !== 'calibrate' && DRAW_TOOLS.includes(p.tool)) {
     const last = draft[draft.length - 1];
     const dx = target.point[0] - last[0], dy = target.point[1] - last[1];
     const seg = Math.hypot(dx, dy) * p.mpp;
@@ -568,7 +666,10 @@ export function PlanCanvas(p: Props) {
     let total = 0;
     for (let i = 1; i < draft.length; i++) total += Math.hypot(draft[i][0] - draft[i - 1][0], draft[i][1] - draft[i - 1][1]);
     total = (total + Math.hypot(dx, dy)) * p.mpp;
-    measure = `${seg.toFixed(1)} m · ${brg.toFixed(0).padStart(3, '0')}°${draft.length > 1 ? ` · total ${total.toFixed(1)} m` : ''}${hover.shift ? ' · 15° lock' : ''}${target.snapped ? ' · snap' : ''}`;
+    const f = (m: number) => formatLength(m, p.unit);
+    measure = p.tool === 'scaleLine'
+      ? `${Math.hypot(dx, dy).toFixed(1)} px · ${brg.toFixed(0).padStart(3, '0')}°${target.snapped ? ' · snap' : ''}`
+      : `${f(seg)} · ${brg.toFixed(0).padStart(3, '0')}°${draft.length > 1 ? ` · total ${f(total)}` : ''}${hover.shift ? ' · 15° lock' : ''}${target.snapped ? ' · snap' : ''}`;
   }
 
   const drawing = DRAW_TOOLS.includes(p.tool);

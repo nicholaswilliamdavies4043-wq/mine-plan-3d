@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { networkLength, fitSimilarity, scaleOf, type Kit, type Plan, type TunnelProfile } from '@mineplan/shared';
+import { useOnSynced } from '../offline/useSync';
 import { api, type ProjectDetail, type ProjectPreview } from '../api';
 import { NetworkPreview } from '../components/NetworkPreview';
 import { Icon } from '../ui/Icon';
@@ -40,6 +41,7 @@ export function ProjectPage() {
   usePageChrome([{ label: 'Projects', to: '/' }, { label: project?.name ?? '…' }]);
 
   const load = () => api.project(projectId!).then(setProject).catch((e) => setError(e.message));
+  useOnSynced(() => { load(); });
   useEffect(() => {
     load();
     api.kits().then(setKits).catch(() => {});
@@ -138,20 +140,23 @@ export function ProjectPage() {
           );
         })}
 
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderStyle: drag ? 'solid' : 'dashed', borderColor: drag ? 'var(--accent)' : undefined, background: drag ? 'var(--accent-soft)' : undefined }}
+        <div className={`card upload-card${drag ? ' drag' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); choose(e.dataTransfer.files?.[0]); }}>
-          <div className="row"><Icon name="upload" /><h3 style={{ margin: 0 }}>Add a plan</h3></div>
-          <button className="ghost" style={{ height: 90, justifyContent: 'center', border: '1px dashed var(--border-strong)', flexDirection: 'column' }}
-            onClick={() => fileInput.current?.click()}>
-            {file ? <><Icon name="check" /> {file.name}</> : <><Icon name="upload" /> Drop a PNG / JPEG here or click to browse</>}
+          <div className="row" style={{ flexWrap: 'nowrap' }}><Icon name="upload" /><h3 style={{ margin: 0 }}>Add a plan</h3></div>
+          <button type="button" className="dropzone" onClick={() => fileInput.current?.click()}>
+            <Icon name={file ? 'check' : 'upload'} />
+            {file
+              ? <span className="dz-name" title={file.name}>{file.name}</span>
+              : <span>Drop a PNG / JPEG here or click to browse</span>}
+            {file && <span className="tiny muted">{(file.size / 1024 / 1024).toFixed(1)} MB · click to choose another</span>}
           </button>
           <input ref={fileInput} type="file" accept="image/png,image/jpeg" hidden onChange={(e) => choose(e.target.files?.[0])} />
-          <div className="row" style={{ flexWrap: 'nowrap' }}>
-            <label className="field" style={{ flex: 1 }}>Plan name<input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="445 S6S7" /></label>
+          <div className="field-grid">
+            <label className="field">Plan name<input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="445 S6S7" /></label>
             <label className="field"><L k="levelRL">Level RL (m)</L><input type="number" value={levelRL} onChange={(e) => setLevelRL(Number(e.target.value))} /></label>
           </div>
-          <button className="primary" disabled={!file || busy} onClick={upload} style={{ justifyContent: 'center' }}>
+          <button className="primary block" disabled={!file || busy} onClick={upload}>
             {busy ? <span className="spinner" /> : <Icon name="arrowUp" size={16} />} Upload and open editor
           </button>
           <span className="tiny muted">200–300 dpi exports give the best detection.</span>
