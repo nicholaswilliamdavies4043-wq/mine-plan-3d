@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Mine plan 3D design system
+   Mine Development Tool design system
    Warm dark UI (default) and light UI, switchable via [data-theme].
    Palette: Carbon black / white base, Vibrant Orange as the action accent,
    Gold as the secondary accent, Electric Blue for selection in canvases.
@@ -7,6 +7,8 @@
 
 :root,
 :root[data-theme='dark'] {
+  --logo-tile: #eef2f8;
+  --logo-ink: #15202f;
   --bg: #0e0c0b;
   --bg-glow-1: rgba(245, 75, 0, 0.10);
   --bg-glow-2: rgba(160, 140, 100, 0.08);
@@ -144,9 +146,14 @@ a { color: var(--accent-2); text-decoration: none; }
   box-shadow: var(--shadow-sm);
 }
 .rail .logo-slot {
-  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 10px;
-  border: 1px dashed var(--border-strong); color: var(--muted); font-size: 9px; text-align: center; line-height: 1.1;
+  width: 40px; height: 40px; border-radius: 10px; display: block; margin-bottom: 10px; line-height: 0;
+  box-shadow: 0 4px 12px rgba(21, 32, 47, 0.18); transition: transform 0.2s var(--ease);
 }
+.rail .logo-slot:hover { transform: translateY(-1px); }
+.rail .logo-slot:focus-visible { outline: 2px solid var(--select); outline-offset: 3px; }
+.portal-icon { display: block; }
+.topbar .crumbs .app-name { color: var(--text); font-weight: 600; white-space: nowrap; }
+@media (max-width: 720px) { .topbar .crumbs .app-name { display: none; } }
 .rail .sep { width: 28px; height: 1px; background: var(--border); margin: 4px 0; }
 .rail-btn {
   position: relative; width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center;

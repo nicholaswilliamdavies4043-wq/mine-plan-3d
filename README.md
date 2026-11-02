@@ -1,4 +1,4 @@
-# Mine plan 3D
+# Mine Development Tool (MDT)
 
 A web app that turns a 2D underground mine plan into a navigable 3D model. It builds the model from reusable tunnel modules rather than generating the whole mine from scratch.
 
@@ -71,6 +71,16 @@ Works like a plan distance calculator.
 - Blender-style plan editor with a tool rail (shortcuts V H C R X D S), collapsible properties and a status bar showing pixel, easting/northing and zoom.
 - Precise drawing tools: a crosshair and a 4× magnifier (M), live length and bearing readouts, a 15° angle lock (Shift), snapping (N, or Ctrl to place without snapping) and arrow-key nudging of junctions.
 - Every parameter has an (i) tip, and **Info & parameters** in the left rail explains every input in full.
+
+### Name and logo
+
+The app is called **Mine Development Tool** (MDT for short), a companion to ADT (Area Definition Tool). In mining, "development" means the drives, crosscuts and declines that the app models.
+
+The logo, **Portal**, is a tunnel entrance with the drive profile used in the 3D model (flat floor, straight walls, arched back). Its opening is set off center, so the drive seems to curve away into the rock.
+
+- In the app: `client/src/ui/Logo.tsx`.
+- Browser tab and installed-app icons: `client/public/favicon.svg`, `client/public/icons/` and `client/public/manifest.webmanifest`.
+- After changing the shape, rebuild the PNG icons with `node client/scripts/render-icons.cjs`.
 
 ## Stack
 

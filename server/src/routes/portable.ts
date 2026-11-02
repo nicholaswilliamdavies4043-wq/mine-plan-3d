@@ -71,7 +71,7 @@ export function portableRoutes(store: Store, storage: ObjectStorage): Router {
     } catch {
       throw new HttpError(400, 'This is not a valid project file.');
     }
-    if (doc?.format !== FORMAT || !doc.project || !Array.isArray(doc.plans)) throw new HttpError(400, 'This is not a Mine plan 3D project file.');
+    if (doc?.format !== FORMAT || !doc.project || !Array.isArray(doc.plans)) throw new HttpError(400, 'This is not a Mine Development Tool project file (.mine3d).');
     if (doc.version > VERSION) throw new HttpError(400, 'This project was saved by a newer version of the app. Update the app first.');
 
     // assets: reuse an identical id if it already exists in this library, otherwise create it

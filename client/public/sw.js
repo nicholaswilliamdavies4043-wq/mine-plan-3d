@@ -1,4 +1,4 @@
-/* Mine plan 3D service worker: keeps the app usable offline.
+/* Mine Development Tool service worker: keeps the app usable offline.
  *  - App shell (index.html + built JS/CSS from precache-manifest.json): cached at install,
  *    navigation is network-first with the cached shell as fallback.
  *  - Plan images, 3D asset files and thumbnails: cache-first (they never change for a given URL),
@@ -14,7 +14,7 @@ const MEDIA = 'mineplan-media-v1';
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL);
-    let files = ['/', '/index.html'];
+    let files = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest', '/icons/favicon-32.png', '/icons/icon-192.png', '/icons/apple-touch-icon.png'];
     try {
       const r = await fetch('/precache-manifest.json', { cache: 'no-store' });
       if (r.ok) files = files.concat((await r.json()).files || []);

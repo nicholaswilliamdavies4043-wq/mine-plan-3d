@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { ThemeSwitch } from './theme';
 import { useToast } from './toast';
+import { PortalIcon } from './Logo';
 import { useSyncState } from '../offline/useSync';
 import { api } from '../api';
 
@@ -97,8 +98,9 @@ export function Shell({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{ crumbs, setCrumbs, query, setQuery, searchEnabled, setSearchEnabled }}>
       <div className="shell">
         <nav className="rail" aria-label="Main">
-          {/* Logo position: insert the official logo file here (do not redraw it). */}
-          <div className="logo-slot" title="Logo placeholder">LOGO</div>
+          <Link to="/" className="logo-slot" aria-label="Mine Development Tool, projects" title="Mine Development Tool">
+            <PortalIcon size={40} />
+          </Link>
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => `rail-btn${isActive ? ' active' : ''}`} aria-label={n.label}>
               <Icon name={n.icon} size={20} />
@@ -110,7 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="main-col">
           <header className="topbar">
             <div className="crumbs">
-              <Link to="/">Mine plan 3D</Link>
+              <Link to="/" className="app-name">Mine Development Tool</Link>
               {crumbs.map((c, i) => (
                 <span key={i} className="row" style={{ gap: 8, flexWrap: 'nowrap', minWidth: 0 }}>
                   <Icon name="chevron" size={14} />
