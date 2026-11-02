@@ -3,6 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "description": "Convert 2D underground mine plans into navigable 3D models assembled from reusable tunnel assets.",
+  "author": "Nicholas William Davies",
   "workspaces": [
     "shared",
     "server",

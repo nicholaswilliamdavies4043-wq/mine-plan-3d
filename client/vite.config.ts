@@ -20,8 +20,14 @@ function precacheManifest(): Plugin {
   };
 }
 
+const rootPkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf8')) as { version: string };
+
 export default defineConfig({
   plugins: [react(), precacheManifest()],
+  define: {
+    __APP_VERSION__: JSON.stringify(rootPkg.version),
+    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   server: {
     port: 5173,
     proxy: { '/api': 'http://localhost:4000' },

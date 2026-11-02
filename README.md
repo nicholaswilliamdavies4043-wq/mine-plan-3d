@@ -74,7 +74,7 @@ Works like a plan distance calculator.
 
 ### Name and logo
 
-The app is called **Mine Development Tool** (MDT for short), a companion to ADT (Area Definition Tool). In mining, "development" means the drives, crosscuts and declines that the app models.
+The app is called **Mine Development Tool** (MDT for short), a companion to ADT (Area Definition Tool). It is developed by Nicholas William Davies; see **About** at the bottom of the left bar. In mining, "development" means the drives, crosscuts and declines that the app models.
 
 The logo, **Portal**, is a tunnel entrance with the drive profile used in the 3D model (flat floor, straight walls, arched back). Its opening is set off center, so the drive seems to curve away into the rock.
 
