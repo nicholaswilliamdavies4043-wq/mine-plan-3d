@@ -425,7 +425,7 @@ export function ViewerPage() {
           <button className={mode === 'walk' ? 'on' : ''} onClick={() => { setMode('walk'); setPlacing(null); }} disabled={!assembly.spawn}><Icon name="walk" size={15} /> Walk</button>
           <InfoTip k={mode === 'walk' ? 'viewWalk' : 'viewOverview'} />
         </div>
-        <div className="seg" role="tablist" style={{ width: '100%' }}>
+        <div className="seg tabs3" role="tablist" style={{ width: '100%' }}>
           <button style={{ flex: 1, justifyContent: 'center' }} className={tab === 'model' ? 'on' : ''} onClick={() => setTab('model')}><Icon name="layers" size={15} /> Model</button>
           <button style={{ flex: 1, justifyContent: 'center' }} className={tab === 'inventory' ? 'on' : ''} onClick={() => setTab('inventory')}>
             <Icon name="box" size={15} /> Inventory {items.length > 0 && <span className="badge">{items.length}</span>}
@@ -536,7 +536,16 @@ export function ViewerPage() {
               <div className="prop-row"><span>Easting (m)</span><input type="number" step="0.1" value={sel.position[0]} onChange={(e) => changeItem(sel.id, { position: [Number(e.target.value), sel.position[1], sel.position[2]] })} /></div>
               <div className="prop-row"><span>Northing (m)</span><input type="number" step="0.1" value={sel.position[1]} onChange={(e) => changeItem(sel.id, { position: [sel.position[0], Number(e.target.value), sel.position[2]] })} /></div>
               <div className="prop-row"><span>RL (m)</span><input type="number" step="0.1" value={sel.position[2]} onChange={(e) => changeItem(sel.id, { position: [sel.position[0], sel.position[1], Number(e.target.value)] })} /></div>
-              <div className="prop-row"><span>Heading (°)</span><input type="number" step="5" value={sel.rotationDeg} onChange={(e) => changeItem(sel.id, { rotationDeg: Number(e.target.value) })} /></div>
+              <div className="row small" style={{ flexWrap: 'nowrap' }}><strong>Rotation</strong><InfoTip k="itemRotation" /><span className="spacer" />
+                <button className="ghost sm" disabled={!sel.pitchDeg && !sel.rollDeg} onClick={() => changeItem(sel.id, { pitchDeg: 0, rollDeg: 0 })} title="Stand the item upright again (keeps the heading)">Level</button>
+              </div>
+              <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+                {([['Heading', 'rotationDeg', 5], ['Pitch', 'pitchDeg', 1], ['Roll', 'rollDeg', 1]] as const).map(([lab, key, step]) => (
+                  <label key={key} className="field" style={{ flex: 1 }}>{lab} (°)
+                    <input type="number" step={step} style={{ width: '100%' }} value={sel[key] ?? 0}
+                      onChange={(e) => changeItem(sel.id, { [key]: Number(e.target.value) || 0 })} /></label>
+                ))}
+              </div>
               <label className="field">Size ×{((sel.scale[0] + sel.scale[1] + sel.scale[2]) / 3).toFixed(2)}
                 <input type="range" min={0.1} max={5} step={0.05} value={(sel.scale[0] + sel.scale[1] + sel.scale[2]) / 3}
                   onChange={(e) => { const v = Number(e.target.value); changeItem(sel.id, { scale: [v, v, v] }); }} /></label>

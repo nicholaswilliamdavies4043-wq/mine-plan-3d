@@ -570,3 +570,7 @@ button.swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; borde
 .about-page code { font-size: 12px; padding: 1px 5px; border-radius: 5px; background: var(--surface-3); }
 @media (max-width: 860px) { .about-grid { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .about-features { grid-template-columns: 1fr; } .about-hero { padding: 18px; gap: 16px; } }
+
+/* three panel tabs in the 3D viewer must fit the panel width */
+.seg.tabs3 button { padding: 6px 6px; gap: 5px; min-width: 0; }
+.seg.tabs3 button svg { flex: none; }

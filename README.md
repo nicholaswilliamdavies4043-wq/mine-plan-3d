@@ -61,7 +61,7 @@ Works like a plan distance calculator.
 - Placing items: in a project's 3D model, open the **Inventory** tab.
   - In Overview, click **Place** and then a point in a drive. The item lands on the drive floor.
   - In Walk, **Place here** puts the item 4 m in front of you.
-- Select a placed item to move, rotate or scale it with the gizmo (G / R / S), or type exact values: easting, northing, RL, heading and scale. You can also label, duplicate or remove it. Items are saved with the project and included in `.mine3d` downloads.
+- Select a placed item to move, rotate or scale it with the gizmo (G / R / S), or type exact values: easting, northing, RL, heading, pitch, roll and scale. Rotation works about all three axes: heading (vertical axis), pitch (tilt the front up or down) and roll (about the item's length axis). **Level** resets pitch and roll. You can also label, duplicate or remove it. Items are saved with the project and included in `.mine3d` downloads.
 - **Drive and crosscut names**: in the plan editor, select a drive segment and give it a name and type (drive, crosscut, ore drive, ramp and so on). **Apply name to the whole straight run** names it through the junctions.
   - Names show on the plan, as signs along the drives in 3D, and in the walk-through location bar (name, type and E/N/RL).
 
@@ -129,6 +129,7 @@ Set `DATABASE_URL` and start the server. That is all:
    - Or set it up by hand: create a PostgreSQL database, then in the web service → *Environment* add `DATABASE_URL` = the database's **Internal Database URL**.
    - Build command: `npm ci --include=dev && npm run build`. Start command: `npm start`.
 2. Open **Data source** in the app. It should show *PostgreSQL · Connected*.
+3. **Keep awake**: free Render instances sleep after 15 minutes without traffic. The server pings its own public URL (`RENDER_EXTERNAL_URL`) every 11 minutes to stay awake. The Data source page shows the last ping. Change the interval with `KEEP_ALIVE_MINUTES`, or turn it off with `KEEP_ALIVE=false`. Outside Render, set `KEEP_ALIVE_URL` to the app's public address.
 
 **Moving existing local data into PostgreSQL:**
 

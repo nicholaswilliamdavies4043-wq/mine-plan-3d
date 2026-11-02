@@ -18,6 +18,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      # the server pings its own public URL every 11 minutes so the free instance does not sleep
+      - key: KEEP_ALIVE_MINUTES
+        value: 11
       - key: DATABASE_URL
         fromDatabase:
           name: mineplan-db

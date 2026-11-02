@@ -176,8 +176,12 @@ export interface PlacedItem {
   label?: string;
   /** World position: [Easting, Northing, elevation RL] in metres (base of the item). */
   position: Vec3;
-  /** Heading rotation about the vertical axis, degrees (counter-clockwise seen from above). */
+  /** Heading: rotation about the vertical axis, degrees (counter-clockwise seen from above). */
   rotationDeg: number;
+  /** Pitch: tilt of the item's front up (+) or down (-), degrees, about its width axis. Applied after the heading. */
+  pitchDeg?: number;
+  /** Roll: rotation about the item's own length axis, degrees (+ = right side down). Applied last. */
+  rollDeg?: number;
   /** Scale along the item's length, height and width. */
   scale: Vec3;
 }
@@ -419,5 +423,7 @@ export interface SystemStatus {
   host: string;
   dataSource: DataSourceStatus;
   storage: FileStorageStatus;
+  /** Self-ping that keeps a free Render instance awake. */
+  keepAlive: { enabled: boolean; url: string | null; intervalMinutes: number; lastPingAt: string | null; lastOk: boolean | null; lastError: string | null };
   warnings: string[];
 }

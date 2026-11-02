@@ -40,6 +40,8 @@ const projectPatch = z.object({
     label: z.string().max(120).optional(),
     position: z.tuple([z.number(), z.number(), z.number()]),
     rotationDeg: z.number(),
+    pitchDeg: z.number().min(-360).max(360).optional(),
+    rollDeg: z.number().min(-360).max(360).optional(),
     scale: z.tuple([z.number().positive(), z.number().positive(), z.number().positive()]),
   })).max(5000).optional(),
   measurements: modelMeasurements.optional(),

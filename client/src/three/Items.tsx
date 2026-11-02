@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { TransformControls } from '@react-three/drei';
 import type { ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
-import { clampToDrives, normalisationMatrix, type Asset, type Assembly, type PlacedItem, type Vec3 } from '@mineplan/shared';
+import { clampToDrives, itemEuler, normalisationMatrix, type Asset, type Assembly, type PlacedItem, type Vec3 } from '@mineplan/shared';
 import { api } from '../api';
 import { loadGltfUrl } from './loaders';
 import { Sign } from './Signs';
@@ -46,7 +46,7 @@ function ItemObject({ item, asset, origin, selected, onSelect, onRef }: {
   };
 
   return (
-    <group ref={onRef} position={local} rotation={[0, (item.rotationDeg * Math.PI) / 180, 0]} scale={item.scale} onClick={click}
+    <group ref={onRef} position={local} rotation={itemEuler(item)} scale={item.scale} onClick={click}
       onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; }} onPointerOut={() => { document.body.style.cursor = ''; }}>
       {scene && <group matrixAutoUpdate={false} matrix={norm}><primitive object={scene} /></group>}
       {(!scene || failed) && (
@@ -92,12 +92,15 @@ export function PlacedItems({ items, assets, assembly, selectedId, mode, keepInD
       o.position.z = z;
     }
     const w = localToWorld(origin, [x, o.position.y, z]);
-    // heading from the rotated +X axis (Euler y alone flips past ±90°)
-    const v = new THREE.Vector3(1, 0, 0).applyQuaternion(o.quaternion);
-    const heading = (Math.atan2(-v.z, v.x) * 180) / Math.PI;
+    // heading, pitch and roll in the same order the item is drawn with (YZX): heading keeps its full
+    // ±180° range, pitch is ±90°, roll ±180°
+    const e = new THREE.Euler().setFromQuaternion(o.quaternion, 'YZX');
+    const deg = (rad: number) => Math.round(((rad * 180) / Math.PI) * 10) / 10;
     onChange(selectedId, {
       position: [r3(w[0]), r3(w[1]), r3(w[2])],
-      rotationDeg: Math.round(heading * 10) / 10,
+      rotationDeg: deg(e.y),
+      pitchDeg: deg(e.z),
+      rollDeg: deg(e.x),
       scale: [r3(Math.max(0.01, o.scale.x)), r3(Math.max(0.01, o.scale.y)), r3(Math.max(0.01, o.scale.z))],
     });
   };
@@ -122,7 +125,7 @@ export function PlacedItems({ items, assets, assembly, selectedId, mode, keepInD
       })}
       {selectedObj && mode && (
         <TransformControls object={selectedObj} mode={mode} size={0.8}
-          showX={mode !== 'rotate'} showZ={mode !== 'rotate'} showY onMouseUp={commit} />
+          space={mode === 'translate' ? 'world' : 'local'} showX showY showZ onMouseUp={commit} />
       )}
     </group>
   );

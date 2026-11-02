@@ -118,6 +118,15 @@ export function SystemPage() {
           <div className="v num">{ds?.counts ? plural(ds.counts.projects, 'project') : '–'}</div>
           <div className="d">{ds?.counts ? `${plural(ds.counts.plans, 'plan')} · ${plural(ds.counts.assets, 'asset')} · ${plural(ds.counts.kits, 'kit')}` : '–'}</div>
         </div>
+        <div className={`status-card${st?.keepAlive.enabled ? ` accent-${st.keepAlive.lastOk === false ? 'err' : 'ok'}` : ''}`}>
+          <div className="k"><Icon name="refresh" size={15} /> Keep awake</div>
+          <div className="v">{!st ? '–' : st.keepAlive.enabled ? `Every ${st.keepAlive.intervalMinutes} min` : 'Off'}</div>
+          <div className="d">{!st ? '–' : st.keepAlive.enabled
+            ? (st.keepAlive.lastPingAt
+              ? `Last ping ${timeAgo(st.keepAlive.lastPingAt)}${st.keepAlive.lastOk === false ? ` failed (${st.keepAlive.lastError})` : ' · OK'}`
+              : 'First ping a minute after start-up')
+            : 'Not needed here. On Render it turns on by itself; elsewhere set KEEP_ALIVE_URL.'}</div>
+        </div>
       </div>
 
       <div className="card stack" style={{ maxWidth: 1100 }}>

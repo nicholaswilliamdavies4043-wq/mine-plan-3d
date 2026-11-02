@@ -51,6 +51,15 @@ export function normalisationMatrix(meta: Pick<AssetMeta, 'unitScale' | 'upAxis'
   return multiply(translateM(-p[0], -p[1], -p[2]), orientationMatrix(meta));
 }
 
+/**
+ * Item orientation as three.js Euler angles (radians, order 'YZX'): heading about the vertical
+ * axis first, then pitch about the item's width axis (Z), then roll about its length axis (X).
+ */
+export function itemEuler(item: { rotationDeg: number; pitchDeg?: number; rollDeg?: number }): [number, number, number, 'YZX'] {
+  const r = Math.PI / 180;
+  return [(item.rollDeg ?? 0) * r, item.rotationDeg * r, (item.pitchDeg ?? 0) * r, 'YZX'];
+}
+
 /** Placement matrix T(position) * Ry(rot) * S(scale). */
 export function placementMatrix(position: Vec3, rotationY: number, scale: Vec3): Mat4 {
   return multiply(translateM(position[0], position[1], position[2]), multiply(rotYM(rotationY), scaleM(scale[0], scale[1], scale[2])));
