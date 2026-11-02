@@ -5,6 +5,7 @@ import { config } from '../config';
 import type { Store } from '../store';
 import type { ObjectStorage } from '../storage';
 import { ah } from './util';
+import { keepAliveStatus } from '../keepAlive';
 
 const startedAt = new Date().toISOString();
 
@@ -28,7 +29,7 @@ export function systemRoutes(store: Store, storage: ObjectStorage): Router {
     if (!dataSource.connected) warnings.push('The server cannot reach the database. Changes are kept on each device and are sent when it is back.');
     const out: SystemStatus = {
       ok: dataSource.connected, version: config.version, startedAt, serverTime: new Date().toISOString(),
-      host: process.env.RENDER_SERVICE_NAME || os.hostname(), dataSource, storage: files, warnings,
+      host: process.env.RENDER_SERVICE_NAME || os.hostname(), dataSource, storage: files, keepAlive: keepAliveStatus(), warnings,
     };
     res.setHeader('Cache-Control', 'no-store');
     res.json(out);
