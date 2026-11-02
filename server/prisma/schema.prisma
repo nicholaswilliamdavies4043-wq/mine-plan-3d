@@ -18,6 +18,7 @@ model Project {
   kitId       String?
   profile     Json
   items       Json?
+  measurements Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   plans       Plan[]
@@ -38,6 +39,7 @@ model Plan {
   excludes      Json
   params        Json
   network       Json
+  measurements  Json?
   lastDetection Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

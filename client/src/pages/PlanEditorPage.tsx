@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  addPolyline, defaultDetectionParams, deleteEdges, deleteNode, fitSimilarity, mergeDegree2, moveNode, networkLength,
-  polygonArea, polylineLength, pxToWorld, residuals, rotationOf, scaleOf, straightRun, uid, DRIVE_KINDS,
-  type DriveKind, type DetectionParams, type DetectionResult, type GeoRef, type Plan, type PlanNetwork, type Polygon, type Vec2,
+  addPolyline, defaultDetectionParams, deleteEdges, deleteNode, fitSimilarity, formatLength, fromUnit, measurementsCsv, mergeDegree2, moveNode,
+  networkLength, polygonArea, polylineLength, pxToWorld, residuals, rotationOf, scaleFromLine, scaleOf, segmentLengths2, straightRun, toUnit, uid,
+  DRIVE_KINDS, LENGTH_UNITS, MEASURE_COLORS,
+  type DriveKind, type DetectionParams, type DetectionResult, type GeoRef, type LengthUnit, type MeasureKind, type Plan, type PlanMeasurement,
+  type PlanNetwork, type Polygon, type Vec2,
 } from '@mineplan/shared';
 import { api } from '../api';
 import { PlanCanvas, type Selection, type Tool } from '../components/PlanCanvas';
@@ -11,16 +13,23 @@ import { Icon, type IconName } from '../ui/Icon';
 import { HelpBrowser, InfoTip, L } from '../ui/help';
 import { usePageChrome } from '../ui/shell';
 import { useToast } from '../ui/toast';
+import { useOnSynced, useSyncState } from '../offline/useSync';
+import { downloadText, useLengthUnit } from '../ui/units';
+
 
 const TOOLS: { tool: Tool; icon: IconName; label: string; key: string }[] = [
   { tool: 'select', icon: 'cursor', label: 'Select & move', key: 'V' },
   { tool: 'pan', icon: 'hand', label: 'Pan', key: 'H' },
   { tool: 'calibrate', icon: 'target', label: 'Pick grid point', key: 'C' },
+  { tool: 'scaleLine', icon: 'scaleBar', label: 'Calibrate by known distance', key: 'K' },
   { tool: 'region', icon: 'region', label: 'Draw region', key: 'R' },
   { tool: 'exclude', icon: 'exclude', label: 'Draw exclusion', key: 'X' },
   { tool: 'drive', icon: 'pen', label: 'Draw drive', key: 'D' },
   { tool: 'stope', icon: 'stope', label: 'Draw stope', key: 'S' },
+  { tool: 'measure', icon: 'ruler', label: 'Measure distance', key: 'L' },
 ];
+/** Rail dividers go before these tools. */
+const RAIL_GROUPS = new Set<Tool>(['calibrate', 'drive', 'measure']);
 
 const TOOL_HINTS: Record<Tool, string> = {
   select: 'Click to select · drag junctions to move · arrows nudge · Delete removes · right-drag pans · wheel zooms',
@@ -30,6 +39,8 @@ const TOOL_HINTS: Record<Tool, string> = {
   drive: 'Click along the drive centreline · Shift locks 15° steps · Ctrl places without snapping · double-click / Enter finishes',
   stope: 'Outline a stope · double-click or Enter closes',
   calibrate: 'Click a grid intersection with known coordinates, then type its easting and northing on the right',
+  scaleLine: 'Click both ends of a known distance (scale bar, dimensioned drive), then type the distance on the right',
+  measure: 'Line: click two points · Polyline: click along a route, double-click / Enter finishes · Shift locks 15° · Ctrl places without snapping',
 };
 
 type Tab = 'props' | 'info';
@@ -54,14 +65,14 @@ function RailButton({ icon, label, k, on, disabled, onClick, setTip }: {
 }
 
 /** Collapsible, Blender-style property section with a workflow step indicator. */
-function Section({ n, title, done, children, open }: { n: number; title: string; done?: boolean; open?: boolean; children: React.ReactNode }) {
+function Section({ n, title, done, children, open, icon }: { n?: number; icon?: IconName; title: string; done?: boolean; open?: boolean; children: React.ReactNode }) {
   // open state is only suggested on first render; afterwards the user controls it
   const initial = useRef(open);
   return (
     <details className="panel" open={initial.current}>
       <summary>
         <Icon name="chevron" size={14} className="chev" />
-        <span className={`step-dot${done ? ' done' : ''}`}>{done ? <Icon name="check" size={12} /> : n}</span>
+        <span className={`step-dot${done ? ' done' : ''}`}>{done ? <Icon name="check" size={12} /> : icon ? <Icon name={icon} size={12} /> : n}</span>
         {title}
       </summary>
       <div className="inner">{children}</div>
@@ -109,6 +120,9 @@ export function PlanEditorPage() {
   const [detecting, setDetecting] = useState(false);
   const [lastResult, setLastResult] = useState<Omit<DetectionResult, 'network' | 'maskPng'> | null>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
+  const [measureMode, setMeasureMode] = useState<MeasureKind>('line');
+  const [unit, setUnit] = useLengthUnit();
+  const sync = useSyncState();
   const history = useRef<PlanNetwork[]>([]);
   const future = useRef<PlanNetwork[]>([]);
   const saveTimer = useRef<number | null>(null);
@@ -124,19 +138,24 @@ export function PlanEditorPage() {
     api.project(projectId!).then((p) => setProjectName(p.name)).catch(() => {});
   }, [planId, projectId]);
 
+  useOnSynced(() => {
+    if (Object.keys(pending.current).length || !planId) return;
+    api.plan(planId).then((p) => setPlan((cur) => (cur ? { ...p } : cur))).catch(() => {});
+  });
+
   const flush = useCallback(async () => {
     const patch = pending.current;
     pending.current = {};
     if (!Object.keys(patch).length) return;
     setSaveState('saving');
     try {
-      await api.updatePlan(planId!, patch);
+      await api.updatePlan(planId!, patch, plan?.name ? `plan "${plan.name}"` : 'the plan');
       setSaveState(Object.keys(pending.current).length ? 'dirty' : 'saved');
     } catch (e: any) {
       setSaveState('error');
       setError(e.message);
     }
-  }, [planId]);
+  }, [planId, plan?.name]);
 
   const update = useCallback((patch: Partial<Plan>, opts: { recordHistory?: boolean } = {}) => {
     setPlan((cur) => {
@@ -204,6 +223,27 @@ export function PlanEditorPage() {
   const params: DetectionParams = { ...defaultDetectionParams(), ...plan.params };
   const setParam = <K extends keyof DetectionParams>(k: K, v: DetectionParams[K]) => update({ params: { ...params, [k]: v } });
   const setGeoref = (g: GeoRef) => update({ georef: g });
+  const measurements = plan.measurements ?? [];
+  const setMeasurements = (m: PlanMeasurement[]) => update({ measurements: m });
+  const changeMeasurement = (id: string, patch: Partial<PlanMeasurement>) => setMeasurements(measurements.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const selMeasure = selection?.kind === 'measure' ? measurements.find((m) => m.id === selection.id) : undefined;
+  const scaleLine = plan.georef.scaleLine ?? null;
+  const scaleLinePx = scaleLine ? Math.hypot(scaleLine.b[0] - scaleLine.a[0], scaleLine.b[1] - scaleLine.a[1]) : 0;
+  /** Set the known distance (entered in the current unit) and the scale it gives. */
+  const setScaleDistance = (value: number) => {
+    if (!scaleLine) return;
+    const distanceM = fromUnit(value, unit);
+    const mppLine = scaleFromLine(scaleLine.a, scaleLine.b, distanceM);
+    if (!mppLine) return;
+    setGeoref({ ...plan.georef, scaleLine: { ...scaleLine, distanceM }, metersPerPixel: Math.round(mppLine * 1e6) / 1e6 });
+  };
+  const exportCsv = () => {
+    const rows = measurements.map((m) => ({
+      label: m.label, type: m.kind, source: plan.name, segments: m.points.length - 1,
+      pixels: polylineLength(m.points), lengthM: polylineLength(m.points) * mpp,
+    }));
+    downloadText(measurementsCsv(rows, unit), `${plan.name.replace(/[^\w.-]+/g, '_')}-measurements.csv`);
+  };
   const res = residuals(plan.georef);
   const steps = [calibrated, plan.regions.length > 0, !!lastResult || plan.network.edges.length > 0, plan.network.edges.length > 0];
 
@@ -236,6 +276,7 @@ export function PlanEditorPage() {
     else if (selection.kind === 'stope') setNetwork({ ...plan.network, stopes: plan.network.stopes.filter((s) => s.id !== selection.id) });
     else if (selection.kind === 'region') update({ regions: plan.regions.filter((_, i) => i !== selection.index) });
     else if (selection.kind === 'exclude') update({ excludes: plan.excludes.filter((_, i) => i !== selection.index) });
+    else if (selection.kind === 'measure') update({ measurements: (plan.measurements ?? []).filter((m) => m.id !== selection.id) });
     setSelection(null);
   };
 
@@ -275,7 +316,7 @@ export function PlanEditorPage() {
       <div className="toolbar-v" role="toolbar" aria-label="Tools" onMouseLeave={() => setTip(null)}>
         {TOOLS.map((t, i) => (
           <span key={t.tool} style={{ display: 'contents' }}>
-            {(i === 2 || i === 5) && <div className="divider" style={{ width: 28 }} />}
+            {i > 0 && RAIL_GROUPS.has(t.tool) && <div className="divider" style={{ width: 28 }} />}
             <RailButton icon={t.icon} label={t.label} k={t.key} on={tool === t.tool} onClick={() => setTool(t.tool)} setTip={setTip} />
           </span>
         ))}
@@ -311,6 +352,10 @@ export function PlanEditorPage() {
           regions={plan.regions}
           excludes={plan.excludes}
           calibration={plan.georef.points}
+          measurements={measurements}
+          measureMode={measureMode}
+          scaleLine={scaleLine}
+          unit={unit}
           maskUrl={mask}
           showMask={showMask}
           showNetwork={showNetwork}
@@ -340,6 +385,26 @@ export function PlanEditorPage() {
             setGeoref({ ...plan.georef, points: [...plan.georef.points, { px: q, world: last ? [...last.world] as Vec2 : [0, 0] }] });
             setTab('props');
             toast(`Point ${plan.georef.points.length + 1} placed. Enter its coordinates.`, 'info');
+          }}
+          onMeasure={(pts) => {
+            const n = measurements.length + 1;
+            const m: PlanMeasurement = {
+              id: uid('m'), label: `${pts.length > 2 ? 'Polyline' : 'Line'} ${n}`, kind: pts.length > 2 ? 'polyline' : 'line',
+              points: pts.map((q) => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10] as Vec2),
+              color: MEASURE_COLORS[(n - 1) % MEASURE_COLORS.length], showIn3D: true,
+            };
+            setMeasurements([...measurements, m]);
+            setSelection({ kind: 'measure', id: m.id });
+            toast(`${m.label}: ${formatLength(polylineLength(m.points) * mpp, unit)}`);
+          }}
+          onScaleLine={(a0, b0) => {
+            const r1 = (q: Vec2): Vec2 => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10];
+            const a = r1(a0), b = r1(b0);
+            const distanceM = scaleLine?.distanceM ?? 10;
+            const mppLine = scaleFromLine(a, b, distanceM) ?? plan.georef.metersPerPixel;
+            setGeoref({ ...plan.georef, scaleLine: { a, b, distanceM }, metersPerPixel: Math.round(mppLine * 1e6) / 1e6 });
+            setTab('props');
+            toast('Scale line drawn. Type its real length under Scale & level.', 'info');
           }}
           onDelete={onDelete}
         />
@@ -371,19 +436,19 @@ export function PlanEditorPage() {
         </div>
         <div className="scroll">
           {tab === 'info' ? (
-            <HelpBrowser compact groups={['Workflow', 'Scale & level', 'Select portion', 'Detection', 'Editing tools']} />
+            <HelpBrowser compact groups={['Workflow', 'Scale & level', 'Select portion', 'Detection', 'Editing tools', 'Measure']} />
           ) : (
             <>
               <div className="stack" style={{ gap: 6 }}>
                 <div className="row small"><strong style={{ fontSize: 15 }}>{plan.name}</strong><span className="spacer" />
-                  <span className="muted">{saveState === 'saved' ? 'Saved' : saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Editing…'}</span>
+                  <span className="muted">{saveState === 'saved' ? (sync.pending ? 'Saved on this device' : 'Saved') : saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Editing…'}</span>
                 </div>
                 <div className="progress-steps">{steps.map((d, i) => <div key={i} className={`s${d ? ' done' : ''}`} />)}</div>
               </div>
               {error && <div className="error-box">{error}</div>}
 
               {/* selection */}
-              {(selEdge || selNode || selStope) && (
+              {(selEdge || selNode || selStope || selMeasure) && (
                 <div className="panel anim-in" style={{ borderColor: 'var(--select)' }}>
                   <div className="inner" style={{ paddingTop: 12 }}>
                     {selEdge && (<>
@@ -418,6 +483,25 @@ export function PlanEditorPage() {
                       <span className="tiny muted">Arrow keys nudge 0.5 px, Shift + arrow 5 px.</span>
                       <button className="danger" onClick={onDelete}><Icon name="trash" size={15} /> Delete with connected drives</button>
                     </>)}
+                    {selMeasure && (<>
+                      <strong className="row"><span className="m-dot" style={{ background: selMeasure.color }} /> Measurement</strong>
+                      <label className="field">Label<input value={selMeasure.label} onChange={(e) => changeMeasurement(selMeasure.id, { label: e.target.value })} /></label>
+                      <dl className="kv">
+                        <dt>Distance</dt><dd><strong>{formatLength(polylineLength(selMeasure.points) * mpp, unit)}</strong></dd>
+                        <dt>Pixels</dt><dd>{polylineLength(selMeasure.points).toFixed(1)} px</dd>
+                        {selMeasure.points.length > 2 && segmentLengths2(selMeasure.points, mpp).map((d, i) => (
+                          <span key={i} style={{ display: 'contents' }}><dt>Segment {i + 1}</dt><dd>{formatLength(d, unit)}</dd></span>
+                        ))}
+                      </dl>
+                      <div className="row" style={{ gap: 6 }}>
+                        {MEASURE_COLORS.map((c) => (
+                          <button key={c} className="swatch" aria-label={`Colour ${c}`} style={{ background: c, outline: c === selMeasure.color ? '2px solid var(--text)' : undefined }}
+                            onClick={() => changeMeasurement(selMeasure.id, { color: c })} />
+                        ))}
+                      </div>
+                      <label className="toggle"><input type="checkbox" checked={selMeasure.showIn3D} onChange={(e) => changeMeasurement(selMeasure.id, { showIn3D: e.target.checked })} /><span className="track" /><L k="measureIn3D">Show on the walls in 3D</L></label>
+                      <button className="danger" onClick={onDelete}><Icon name="trash" size={15} /> Delete measurement</button>
+                    </>)}
                     {selStope && (<>
                       <strong>Stope</strong>
                       <label className="field">Label<input value={selStope.label ?? ''} onChange={(e) => setStope(selStope.id, { label: e.target.value })} /></label>
@@ -444,6 +528,27 @@ export function PlanEditorPage() {
                   </div>
                 ))}
                 <button className={tool === 'calibrate' ? 'active' : ''} onClick={() => setTool('calibrate')}><Icon name="target" size={15} /> Pick grid point</button>
+                <div className="stack scale-line-box" style={{ gap: 6 }}>
+                  <div className="row small" style={{ flexWrap: 'nowrap' }}><strong>Known distance</strong><InfoTip k="scaleLine" /><span className="spacer" />
+                    <button className={`sm${tool === 'scaleLine' ? ' active' : ''}`} onClick={() => setTool('scaleLine')}><Icon name="scaleBar" size={14} /> {scaleLine ? 'Redraw' : 'Draw'}</button>
+                  </div>
+                  {scaleLine ? (<>
+                    <div className="row" style={{ flexWrap: 'nowrap', gap: 6 }}>
+                      <span className="small muted" style={{ whiteSpace: 'nowrap' }}>{scaleLinePx.toFixed(1)} px =</span>
+                      <input type="number" step="any" min={0} aria-label="Known distance" style={{ flex: 1, minWidth: 0, width: 'auto' }}
+                        value={Number(toUnit(scaleLine.distanceM, unit).toFixed(4))} onChange={(e) => setScaleDistance(Number(e.target.value))} />
+                      <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value as LengthUnit)} style={{ width: 66, flex: 'none' }}>
+                        {LENGTH_UNITS.map((u) => <option key={u.value} value={u.value}>{u.value}</option>)}
+                      </select>
+                      <button className="ghost sm" aria-label="Remove scale line" onClick={() => setGeoref({ ...plan.georef, scaleLine: null })}><Icon name="x" size={14} /></button>
+                    </div>
+                    <span className="tiny muted">
+                      {calibrated
+                        ? `Grid points set the scale (${mpp.toFixed(4)} m/px). By that scale this line is ${formatLength(scaleLinePx * mpp, unit)}, ${(((scaleLinePx * mpp) / scaleLine.distanceM - 1) * 100).toFixed(1)}% from the typed distance.`
+                        : `Scale ${(scaleLine.distanceM / Math.max(scaleLinePx, 1e-9)).toFixed(4)} m/px from this line.`}
+                    </span>
+                  </>) : <span className="tiny muted">No grid on the sheet? Draw over a scale bar or a dimensioned drive and type its length.</span>}
+                </div>
                 {!calibrated && (
                   <div className="prop-row"><L k="metersPerPixel">Metres per pixel</L>
                     <input type="number" step="0.01" value={plan.georef.metersPerPixel} onChange={(e) => setGeoref({ ...plan.georef, metersPerPixel: Math.max(0.0001, Number(e.target.value)) })} /></div>
@@ -548,6 +653,45 @@ export function PlanEditorPage() {
                     onClick={async () => { await flush(); nav(`/projects/${projectId}/view`); }}><Icon name="play" size={16} /> Build 3D model</button>
                   <button className="danger" onClick={() => { if (confirm('Clear all drives and stopes?')) setNetwork({ nodes: [], edges: [], stopes: [] }); }}>Clear</button>
                 </div>
+              </Section>
+
+              <Section icon="ruler" title={`Measure distances${measurements.length ? ` (${measurements.length})` : ''}`} open={tool === 'measure' || measurements.length > 0}>
+                <div className="row" style={{ flexWrap: 'nowrap' }}>
+                  <div className="seg" style={{ flex: 1 }}>
+                    <button style={{ flex: 1, justifyContent: 'center' }} className={tool === 'measure' && measureMode === 'line' ? 'on' : ''} onClick={() => { setMeasureMode('line'); setTool('measure'); }}><Icon name="ruler" size={14} /> Line</button>
+                    <button style={{ flex: 1, justifyContent: 'center' }} className={tool === 'measure' && measureMode === 'polyline' ? 'on' : ''} onClick={() => { setMeasureMode('polyline'); setTool('measure'); }}><Icon name="pen" size={14} /> Polyline</button>
+                  </div>
+                  <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value as LengthUnit)} style={{ width: 66, flex: 'none' }}>
+                    {LENGTH_UNITS.map((u) => <option key={u.value} value={u.value}>{u.value}</option>)}
+                  </select>
+                  <InfoTip k="measureTool" />
+                </div>
+                {!calibrated && !scaleLine && <div className="warn-box small">Set the scale first (grid points or a known distance) so distances are correct.</div>}
+                <div className="stack" style={{ gap: 4 }}>
+                  {!measurements.length && <span className="small muted">No measurements yet. Press <kbd>L</kbd> and click two points.</span>}
+                  {measurements.map((m) => (
+                    <div key={m.id} className={`m-item${selection?.kind === 'measure' && selection.id === m.id ? ' on' : ''}`}
+                      onClick={() => { setTool('select'); setSelection({ kind: 'measure', id: m.id }); }}>
+                      <span className="m-dot" style={{ background: m.color }} />
+                      <span className="m-label">{m.label}</span>
+                      <span className="m-val">{formatLength(polylineLength(m.points) * mpp, unit)}</span>
+                      <button className={`ghost sm icon-only${m.showIn3D ? '' : ' dim'}`} title={m.showIn3D ? 'Shown on the walls in 3D' : 'Hidden in 3D'} aria-label="Show in 3D"
+                        onClick={(e) => { e.stopPropagation(); changeMeasurement(m.id, { showIn3D: !m.showIn3D }); }}><Icon name="eye" size={14} /></button>
+                      <button className="ghost sm icon-only" aria-label="Delete measurement" onClick={(e) => {
+                        e.stopPropagation();
+                        setMeasurements(measurements.filter((x) => x.id !== m.id));
+                        if (selection?.kind === 'measure' && selection.id === m.id) setSelection(null);
+                      }}><Icon name="x" size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+                {measurements.length > 0 && (
+                  <div className="row">
+                    <button className="sm" onClick={exportCsv}><Icon name="csv" size={14} /> Export CSV</button>
+                    <span className="spacer" />
+                    <button className="danger sm" onClick={() => { if (confirm('Delete all measurements on this plan?')) { setMeasurements([]); setSelection(null); } }}>Clear all</button>
+                  </div>
+                )}
               </Section>
             </>
           )}

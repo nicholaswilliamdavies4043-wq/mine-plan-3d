@@ -1,6 +1,6 @@
 {
   "name": "mine-plan-3d",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Convert 2D underground mine plans into navigable 3D models assembled from reusable tunnel assets.",
   "workspaces": [
@@ -14,7 +14,8 @@
     "start": "npm run start -w server",
     "test": "vitest run",
     "typecheck": "tsc -p shared --noEmit && tsc -p server --noEmit && tsc -p client --noEmit",
-    "detect:sample": "tsx server/scripts/detect-sample.ts"
+    "detect:sample": "tsx server/scripts/detect-sample.ts",
+    "db:import": "tsx server/scripts/import-file-to-postgres.ts"
   },
   "devDependencies": {
     "concurrently": "^9.0.1",

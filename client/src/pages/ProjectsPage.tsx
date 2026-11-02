@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useOnSynced } from '../offline/useSync';
 import { api, type ProjectSummary } from '../api';
 import { NetworkPreview } from '../components/NetworkPreview';
 import { Icon } from '../ui/Icon';
@@ -27,6 +28,7 @@ export function ProjectsPage() {
   const nav = useNavigate();
   const toast = useToast();
 
+  useOnSynced(() => { api.projects().then(setProjects).catch(() => {}); });
   useEffect(() => {
     api.projects().then(setProjects).catch((e) => setError(e.message));
   }, []);

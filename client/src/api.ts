@@ -1,23 +1,27 @@
-import type { Asset, DetectionParams, DetectionResult, GltfValidationReport, Kit, Plan, Polygon, Project } from '@mineplan/shared';
+import {
+  defaultDetectionParams, defaultProfile, emptyNetwork, uid,
+  type Asset, type DetectionParams, type DetectionResult, type GltfValidationReport, type Kit, type Plan, type Polygon, type Project, type SystemStatus,
+} from '@mineplan/shared';
+import {
+  cachedGet, createProjectRecord, deleteRecord, onlineRequest, patchRecord, pendingPlanImage, uploadPlanRecord,
+} from './offline/sync';
 
-export class ApiError extends Error {
-  constructor(public status: number, message: string, public details?: any) {
-    super(message);
-  }
-}
+export { ApiError } from './offline/sync';
 
-async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method, headers: {} };
-  if (body instanceof FormData) init.body = body;
-  else if (body !== undefined) {
-    init.body = JSON.stringify(body);
-    (init.headers as Record<string, string>)['Content-Type'] = 'application/json';
+const OFFLINE_DETECT = 'Detection runs on the server. Your edits are kept on this device; run detection again when you are back online.';
+const OFFLINE_ASSETS = 'Importing and deleting assets needs a connection to the server.';
+
+/** Image size of a plan file (used for plans uploaded while offline). */
+async function imageSize(file: File): Promise<{ width: number; height: number }> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { width: img.naturalWidth, height: img.naturalHeight };
+  } finally {
+    URL.revokeObjectURL(url);
   }
-  const r = await fetch('/api' + url, init);
-  if (r.status === 204) return undefined as T;
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError(r.status, data.error ?? r.statusText, data.details);
-  return data as T;
 }
 
 export interface ProjectPreview {
@@ -40,38 +44,54 @@ export type ProjectSummary = Project & {
 export type ProjectDetail = Project & { plans: Plan[] };
 
 export const api = {
-  projects: () => req<ProjectSummary[]>('GET', '/projects'),
-  project: (id: string) => req<ProjectDetail>('GET', `/projects/${id}`),
-  createProject: (name: string, description?: string) => req<Project>('POST', '/projects', { name, description }),
-  updateProject: (id: string, patch: Partial<Project>) => req<Project>('PATCH', `/projects/${id}`, patch),
-  deleteProject: (id: string) => req<void>('DELETE', `/projects/${id}`),
+  projects: () => cachedGet<ProjectSummary[]>('/projects'),
+  project: (id: string) => cachedGet<ProjectDetail>(`/projects/${id}`),
+  createProject: (name: string, description?: string) => {
+    const t = new Date().toISOString();
+    return createProjectRecord({ id: uid('p'), name, description, kitId: null, profile: defaultProfile(), createdAt: t, updatedAt: t });
+  },
+  updateProject: (id: string, patch: Partial<Project>, label?: string) => patchRecord<Project>('project', id, patch as Record<string, unknown>, label),
+  deleteProject: (id: string) => deleteRecord('project', id),
   exportProjectUrl: (id: string) => `/api/projects/${id}/export`,
   importProject: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return req<Project>('POST', '/projects/import', fd);
+    return onlineRequest<Project>('POST', '/projects/import', fd, 'Opening a project file needs a connection to the server.');
   },
 
-  uploadPlan: (projectId: string, file: File, name: string, levelRL: number) => {
-    const fd = new FormData();
-    fd.append('image', file);
-    fd.append('name', name);
-    fd.append('levelRL', String(levelRL));
-    return req<Plan>('POST', `/projects/${projectId}/plans`, fd);
+  uploadPlan: async (projectId: string, file: File, name: string, levelRL: number) => {
+    const id = uid('pl');
+    const form = () => {
+      const fd = new FormData();
+      fd.append('image', file);
+      fd.append('name', name);
+      fd.append('levelRL', String(levelRL));
+      fd.append('id', id);
+      return fd;
+    };
+    const t = new Date().toISOString();
+    const size = await imageSize(file).catch(() => ({ width: 1000, height: 1000 }));
+    const local: Plan = {
+      id, projectId, name, imageKey: '', imageMime: file.type, imageWidth: size.width, imageHeight: size.height,
+      levelRL: Number.isFinite(levelRL) ? levelRL : 0, georef: { metersPerPixel: 1, points: [] }, regions: [], excludes: [],
+      params: defaultDetectionParams(), network: emptyNetwork(), lastDetection: null, createdAt: t, updatedAt: t,
+    };
+    return uploadPlanRecord(local, file, form);
   },
-  plan: (id: string) => req<Plan>('GET', `/plans/${id}`),
-  updatePlan: (id: string, patch: Partial<Plan>) => req<Plan>('PATCH', `/plans/${id}`, patch),
-  deletePlan: (id: string) => req<void>('DELETE', `/plans/${id}`),
-  planImageUrl: (id: string) => `/api/plans/${id}/image`,
+  plan: (id: string) => cachedGet<Plan>(`/plans/${id}`),
+  updatePlan: (id: string, patch: Partial<Plan>, label?: string) => patchRecord<Plan>('plan', id, patch as Record<string, unknown>, label),
+  deletePlan: (id: string) => deleteRecord('plan', id),
+  /** Plan images are cached by the service worker; plans added offline show the local file. */
+  planImageUrl: (id: string) => pendingPlanImage(id) ?? `/api/plans/${id}/image`,
   detect: (id: string, body: { regions?: Polygon[]; excludes?: Polygon[]; params?: Partial<DetectionParams>; mode?: 'replace' | 'merge' }) =>
-    req<DetectionResult>('POST', `/plans/${id}/detect`, body),
+    onlineRequest<DetectionResult>('POST', `/plans/${id}/detect`, body, OFFLINE_DETECT),
 
-  assets: () => req<Asset[]>('GET', '/assets'),
+  assets: () => cachedGet<Asset[]>('/assets'),
   validateAsset: (files: File[], paths: string[]) => {
     const fd = new FormData();
     files.forEach((f) => fd.append('files', f));
     fd.append('paths', JSON.stringify(paths));
-    return req<GltfValidationReport>('POST', '/assets/validate', fd);
+    return onlineRequest<GltfValidationReport>('POST', '/assets/validate', fd, OFFLINE_ASSETS);
   },
   createAsset: (files: File[], paths: string[], metadata: unknown, thumbnail?: Blob | null) => {
     const fd = new FormData();
@@ -79,15 +99,17 @@ export const api = {
     fd.append('paths', JSON.stringify(paths));
     fd.append('metadata', JSON.stringify(metadata));
     if (thumbnail) fd.append('thumbnail', thumbnail, 'thumbnail.png');
-    return req<{ asset: Asset; report: GltfValidationReport }>('POST', '/assets', fd);
+    return onlineRequest<{ asset: Asset; report: GltfValidationReport }>('POST', '/assets', fd, OFFLINE_ASSETS);
   },
-  updateAsset: (id: string, patch: Partial<Asset>) => req<Asset>('PATCH', `/assets/${id}`, patch),
-  deleteAsset: (id: string) => req<void>('DELETE', `/assets/${id}`),
+  updateAsset: (id: string, patch: Partial<Asset>) => onlineRequest<Asset>('PATCH', `/assets/${id}`, patch, OFFLINE_ASSETS),
+  deleteAsset: (id: string) => onlineRequest<void>('DELETE', `/assets/${id}`, undefined, OFFLINE_ASSETS),
   assetFileUrl: (a: Asset, name = a.mainFile) => `/api/assets/${a.id}/files/${name.split('/').map(encodeURIComponent).join('/')}`,
   assetThumbUrl: (a: Asset) => (a.thumbnailKey ? `/api/assets/${a.id}/thumbnail?v=${encodeURIComponent(a.updatedAt)}` : null),
 
-  kits: () => req<Kit[]>('GET', '/kits'),
-  createKit: (k: Partial<Kit>) => req<Kit>('POST', '/kits', k),
-  updateKit: (id: string, k: Partial<Kit>) => req<Kit>('PATCH', `/kits/${id}`, k),
-  deleteKit: (id: string) => req<void>('DELETE', `/kits/${id}`),
+  kits: () => cachedGet<Kit[]>('/kits'),
+  createKit: (k: Partial<Kit>) => onlineRequest<Kit>('POST', '/kits', k, 'Creating a kit needs a connection to the server.'),
+  updateKit: (id: string, k: Partial<Kit>) => patchRecord<Kit>('kit', id, k as Record<string, unknown>, `kit "${k.name ?? ''}"`),
+  deleteKit: (id: string) => onlineRequest<void>('DELETE', `/kits/${id}`, undefined, 'Deleting a kit needs a connection to the server.'),
+
+  systemStatus: () => onlineRequest<SystemStatus>('GET', '/system/status', undefined, 'The server cannot be reached from this device right now.'),
 };

@@ -1,0 +1,24 @@
+# Render blueprint: one web service (API + built client) and one PostgreSQL database.
+# Deploy with "New > Blueprint" in Render and point it at this repository.
+# DATABASE_URL is wired from the database automatically; the app creates its tables on start-up
+# and keeps plan images and 3D asset files in the same database, so nothing is lost on redeploy.
+databases:
+  - name: mineplan-db
+    databaseName: mineplan
+    plan: free
+
+services:
+  - type: web
+    name: mine-plan-3d
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mineplan-db
+          property: connectionString

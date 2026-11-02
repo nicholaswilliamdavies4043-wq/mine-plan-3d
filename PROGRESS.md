@@ -1,5 +1,30 @@
 # Build progress
 
+## Update (2 Nov 2026): offline mode, measurements, PostgreSQL
+
+- **Upload card fix**: the "Add a plan" card no longer overflows. The drop zone text wraps, long file names are shortened with an ellipsis, and the name and RL fields share a grid that can shrink.
+- **Offline**:
+  - IndexedDB cache and change queue with optimistic updates; the sync engine replays the queue with a three-way merge.
+  - The service worker caches the app shell, plan images and model files.
+  - Checked in Chromium (Playwright):
+    - The editor reloads while offline.
+    - Measurements, a new project, a plan upload and scale changes made offline all sync when the connection is back.
+    - A stope and a measurement added on the server in the meantime are kept.
+- **Measurements**:
+  - Plan editor: known-distance calibration (K), Line and Polyline measure (L), units, CSV export.
+  - 3D model: Tools tab for measuring in Overview and Walk.
+  - Measurements are drawn on the drive walls (tape, ticks, signs).
+  - Checked in Walk mode in Chromium.
+- **PostgreSQL**:
+  - Built-in node-postgres store and blob storage; tables are created automatically; TLS for Render.
+  - Status endpoint `/api/system/status` and a Data source page; `render.yaml` blueprint; `npm run db:import`.
+  - Tested against PostgreSQL 16: CRUD, detection, export/import, replay of offline ids, TLS, and the database being down (503).
+- **Walk mode fix**: only clicks on the 3D view capture the mouse, so the side panel works while walking.
+- 19 unit tests pass (merge, measurement helpers and wall layout added).
+
+Not verified: a real Render deployment (no Render account in the build sandbox). The connection handling was tested with local PostgreSQL, with and without TLS.
+
+
 ## Status (1 Nov 2026): working MVP
 
 - All three workspaces pass the type check, and all 9 unit tests pass.

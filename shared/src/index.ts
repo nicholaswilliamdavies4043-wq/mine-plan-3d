@@ -4,3 +4,6 @@ export * from './georef';
 export * from './network';
 export * from './assembly';
 export * from './assetTransform';
+export * from './measure';
+export * from './merge';
+export * from './wallMeasure';

@@ -69,5 +69,6 @@ export function WalkControls({ assembly, collide, speed, onLocate }: {
     camera.position.set(nx, floorY + EYE, nz);
   });
 
-  return <PointerLockControls makeDefault />;
+  // only clicks on the 3D view capture the mouse, so the side panel stays usable while walking
+  return <PointerLockControls makeDefault selector=".viewer canvas" />;
 }

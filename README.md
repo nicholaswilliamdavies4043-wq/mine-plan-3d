@@ -15,6 +15,46 @@ A web app that turns a 2D underground mine plan into a navigable 3D model. It bu
 - **Open project file** (projects page) loads a `.mine3d` file on any PC running the app. Assets already in the library are reused, and the project opens as a new copy.
 - **Export GLB** (3D viewer) saves the assembled model for Blender, Deswik, Unity or any glTF viewer.
 
+### Measuring distances
+
+Works like a plan distance calculator.
+
+- **Calibrate**:
+  - Pick two grid points with their coordinates (C).
+  - Or, with no grid on the sheet, use **Calibrate by known distance** (K): draw over a scale bar or a dimensioned drive and type its length.
+  - With both set, the known distance is shown as a check against the grid scale.
+- **Measure** (L) in the plan editor:
+  - **Line**: click two points.
+  - **Polyline**: click along a route, then double-click or press Enter to finish.
+  - Points snap to junctions, drives and the ends of other measurements. Ctrl places freely; Shift locks to 15° steps.
+- **Units**: m, km, ft or cm. Measurements export to CSV.
+- **On the walls in 3D**: measurements marked *Show in 3D* appear in the 3D model as a tape on the drive's left wall at shoulder height, with distance ticks and a sign giving the label and length. You read them as you walk through.
+- **Tools tab** (3D model): measure in the model itself.
+  - In Overview, click the drive floors.
+  - In Walk, press **Mark point here** (or M) where you stand, walk on, and mark again.
+  - Distances include changes in RL.
+
+### Working offline
+
+- Every page you open is kept on the device. Plan images and 3D models are cached too, and the app itself is cached by a service worker in production builds.
+- While the server cannot be reached, the app keeps working, and the top bar shows **Offline · n changes on this device**. You can still:
+  - edit plans (drives, stopes, regions, scale, measurements);
+  - change project settings, placed items and kits;
+  - create projects and upload plans;
+  - delete plans and projects.
+- When the connection is back, the changes are sent in order and merged with the server's current copy:
+  - Edits by other people in the meantime are kept, record by record (drive segments, junctions, stopes, items, measurements).
+  - Only a value changed on both sides counts as a conflict. The offline version wins and you are told.
+- These still need the server: detection, asset import and opening `.mine3d` files.
+
+### Data source
+
+**Data source** (left bar, or the connection badge in the top bar) shows:
+
+- which database the server uses, the connection state, latency and when data was last saved;
+- where files are stored and the record counts;
+- the changes waiting on this device.
+
 ### Inventory and named drives
 
 - **Inventory** (left bar): add equipment and objects with their own 3D models, such as loaders, refuge chambers, pumps and signs.
@@ -39,8 +79,9 @@ A web app that turns a 2D underground mine plan into a navigable 3D model. It bu
 | API | Node.js 20+, Express, TypeScript (run with `tsx`) |
 | Client | React 18, Vite, Three.js, React Three Fiber, Drei |
 | Plan processing | Pure TypeScript raster pipeline in `server/src/processing` (no native dependencies) |
-| Data | JSON file store (default, zero setup) or PostgreSQL through Prisma |
-| Files | Local disk (`data/storage`) or any S3-compatible object store |
+| Data | PostgreSQL when `DATABASE_URL` is set (tables created automatically), otherwise a JSON file store |
+| Files | In PostgreSQL alongside the data, on local disk (`data/storage`), or any S3-compatible object store |
+| Offline | IndexedDB cache and change queue with three-way merge (`client/src/offline`, `shared/src/merge.ts`), service worker (`client/public/sw.js`) |
 
 ## Quick start (Windows, macOS or Linux)
 
@@ -63,12 +104,36 @@ To debug detection on a plan without the UI:
 npx tsx server/scripts/detect-sample.ts plan.jpg out.png x0,y0,x1,y1 "ex0,ey0,ex1,ey1"
 ```
 
-## PostgreSQL and object storage
+## PostgreSQL (Render or any host)
+
+Set `DATABASE_URL` and start the server. That is all:
+
+- The server creates its tables (`mp_docs`, `mp_blobs`) on start-up, so no migrations are needed.
+- It also stores plan images and 3D asset files in the database, so they survive redeploys (Render's disk is wiped on every deploy).
+- TLS is switched on automatically for remote hosts such as `*.render.com`. Use `DATABASE_SSL=true|false` to force it.
+- If the database is down, the server still starts. Requests answer 503, clients keep their changes offline, and the Data source page shows the error.
+
+**On Render:**
+
+1. Deploy `render.yaml` as a Blueprint. It creates the web service and a PostgreSQL database and wires `DATABASE_URL`.
+   - Or set it up by hand: create a PostgreSQL database, then in the web service → *Environment* add `DATABASE_URL` = the database's **Internal Database URL**.
+   - Build command: `npm ci --include=dev && npm run build`. Start command: `npm start`.
+2. Open **Data source** in the app. It should show *PostgreSQL · Connected*.
+
+**Moving existing local data into PostgreSQL:**
+
+```bash
+DATABASE_URL=postgresql://... npm run db:import
+```
+
+This copies `data/db.json` and `data/storage` into the database. Records that already exist there are skipped.
+
+## Other storage options
 
 Copy `.env.example` to `.env`, then:
 
 ```bash
-# PostgreSQL
+# PostgreSQL through Prisma (alternative to the built-in driver)
 DATA_STORE=prisma
 DATABASE_URL=postgresql://user:pass@localhost:5432/mineplan?schema=public
 npm run prisma:generate -w server
